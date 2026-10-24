@@ -1,7 +1,8 @@
 # @name Dino Runner
 # @ondemand
+# @config p2_color color "P2 dino color" default=#FF3355 group="Players"
 # @config debug bool "Debug logging" default=false group="Diagnostics"
-# @config dino_color color "Dino color" default=#3399FF
+# @config dino_color color "P1 / solo dino color" default=#3399FF group="Players"
 # @config reset_best bool "Reset high scores (one shot)" default=false
 # @config daylight color "Daylight color" default=#181E14
 # @config haze bool "Moving haze" default=false
@@ -28,8 +29,35 @@ class DinoRunner
   var player, pad_label
   var audio, tunes, record_target, record_announced
 
+  var logical, multiplayer, separate, first, order, turn, match_seed, scores, completed
+  var board, pending, initials, letter, menu_index, rank, gated, recover, countdown_at
+  var previous, up_previous, dx_previous, pad_names, local_pressed, scene_ms
+
   def init()
-    self.mode = "ready"
+    self.mode = "menu"
+    self.multiplayer = store.get("last_multiplayer", false)
+    self.separate = store.get("separate_controls", false)
+    self.menu_index = self.multiplayer ? 1 : 0
+    self.logical = 0
+    self.first = 0
+    self.scores = [0, 0]
+    self.completed = []
+    self.turn = 0
+    self.rank = 0
+    self.pending = 0
+    self.previous = [0, 0]
+    self.up_previous = [0, 0]
+    self.dx_previous = [0, 0]
+    self.pad_names = ["", ""]
+    self.local_pressed = false
+    self.gated = true
+    self.recover = false
+    self.scene_ms = 0
+    self.countdown_at = 0
+    self.match_seed = 1
+    self.order = [0, 1]
+    self.initials = [0, 0, 0]
+    self.letter = 0
     self.audio = store.get("sounds") && sound.can("song")
     self.record_target = 0
     self.record_announced = false
@@ -69,7 +97,7 @@ class DinoRunner
     self.jump_cut = false
     self.jump_gravity = 24.0
     self.stars = [[22,1,7],[29,6,13],[35,2,19],[48,7,31],[18,7,43],[39,6,59]]
-    self.tint = store.get("dino_color", 0x3399FF)
+    self.tint = self.logical == 1 ? store.get("p2_color", 0xFF3355) : store.get("dino_color", 0x3399FF)
     self.switch_score = 500
     self.difficulty = 5
     self.initial_speed = 30
@@ -79,12 +107,26 @@ class DinoRunner
     self.demo = false
     self.idle_since = now_ms()
     self.palette()
-    self.best = max(0, int(num(store.get("best", 0), 0)))
-    if store.get("reset_best")
-      self.best = 0
+    if store.get("score_schema", 0) != 1
+      store.set("leaderboard", [])
       store.set("best", 0)
+      store.set("score_schema", 1)
+    end
+    self.board = []
+    var saved = store.get("leaderboard", [])
+    if type(saved) == "list"
+      for row : saved
+        if type(row) == "list" && size(row) == 2 && type(row[0]) == "string" && size(row[0]) == 3 && type(row[1]) == "int" && row[1] > 0
+          self.add_record(row[0], row[1])
+        end
+      end
+    end
+    if store.get("reset_best", false)
+      self.board = []
+      store.set("leaderboard", [])
       store.set("reset_best", false)
     end
+    self.best = size(self.board) > 0 ? self.board[0][1] : 0
     self.score = 0
     self.label = "0"
     self.before = 0
@@ -116,39 +158,27 @@ class DinoRunner
   end
 
   def duration()
-    # Normal rotation: 10s invitation, then 10s demo unless a player starts.
     return 20000
   end
 
   def on_show()
     self.active = true
-    self.idle_since = now_ms()
     self.last = now_ms()
-    # Start with a fresh edge detector on every display visit.
-    self.before = 0
-    self.up_before = false
+    self.gated = true
+    rotation.pause()
   end
 
   def save_best()
-    if !self.demo && self.score > self.best
-      self.best = self.score
-      store.set("best", self.best)
-    end
+    # Records are saved only after a completed run and initials entry.
   end
 
   def on_hide()
     self.active = false
     self.local_duck = false
     self.local_jump = false
-    self.save_best()
-    self.mode = "ready"
-    self.demo = false
-    self.y = 0.0
-    self.vy = 0.0
-    self.jump_until = 0
-    rotation.resume()
     gamepad.release(self, 1)
     gamepad.release(self, 2)
+    rotation.resume()
   end
 
   def random(n)
@@ -159,6 +189,7 @@ class DinoRunner
   def start(demo)
     self.mode = "run"
     self.demo = demo
+    self.scene_ms = 0
     self.record_target = self.best
     self.record_announced = false
     if !demo rotation.pause() end
@@ -194,31 +225,223 @@ class DinoRunner
     end
   end
 
-  def pause()
-    if self.mode == "run"
-      self.mode = "pause"
-    elif self.mode == "pause"
-      self.mode = "run"
-    end
+
+
+
+
+
+
+  # Logical players never depend on the firmware's mutable input slot numbers.
+  def menu()
+    self.mode = "menu"
+    self.demo = false
+    self.local_jump = false
+    self.local_duck = false
+    self.gated = true
     self.accumulator = 0
-    self.last = now_ms()
+  end
+
+  def quit()
+    gamepad.release(self, 1)
+    gamepad.release(self, 2)
+    rotation.close()
+  end
+
+  def new_match(rematch)
+    if rematch self.first = 1 - self.first else self.first = 0 end
+    self.order = self.first == 0 ? [0, 1] : [1, 0]
+    self.match_seed = now_ms() % 65521 + 1
+    self.scores = [0, 0]
+    self.completed = []
+    self.turn = 0
+    self.prepare_turn()
+  end
+
+  def prepare_turn()
+    self.logical = self.multiplayer ? self.order[self.turn] : 0
+    self.player = self.separate ? self.logical + 1 : 1
+    self.mode = "ready"
+    self.gated = true
+    self.recover = false
+    self.palette()
+  end
+
+  def finish_run()
+    self.scores[self.logical] = self.score
+    self.completed.push(self.logical)
+    self.play_event("over")
+    self.gated = true
+    if self.multiplayer && self.turn == 0
+      self.turn = 1
+      self.prepare_turn()
+    else
+      self.pending = 0
+      self.next_initials()
+    end
+  end
+
+  def qualifies(value)
+    return value > 0 && (size(self.board) < 5 || value > self.board[4][1])
+  end
+
+  def next_initials()
+    while self.pending < size(self.completed)
+      var p = self.completed[self.pending]
+      if self.qualifies(self.scores[p])
+        self.initials = [0, 0, 0]
+        self.letter = 0
+        self.mode = "initials"
+        self.gated = true
+        return
+      end
+      self.pending += 1
+    end
+    self.mode = "results"
+    self.menu_index = 0
+    self.gated = true
+  end
+
+  def initials_text()
+    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    var name = ""
+    for c : self.initials name += alphabet[c..c] end
+    return name
+  end
+
+  def add_record(name, value)
+    var next = []
+    var inserted = false
+    for row : self.board
+      if !inserted && value > row[1]
+        next.push([name, value])
+        inserted = true
+      end
+      if size(next) < 5 next.push(row) end
+    end
+    if !inserted && size(next) < 5 next.push([name, value]) end
+    self.board = next
+    store.set("leaderboard", next)
+    self.best = size(next) > 0 ? next[0][1] : 0
+  end
+
+  def action(key, slot)
+    if key == "quit" self.quit() return end
+    if self.mode == "menu"
+      if key == "left" self.menu_index = (self.menu_index + 3) % 4 end
+      if key == "right" self.menu_index = (self.menu_index + 1) % 4 end
+      if key == "a"
+        if self.menu_index == 3 self.quit() return end
+        if self.menu_index == 2
+          self.mode = "scores"
+          self.rank = 0
+        else
+          self.multiplayer = self.menu_index == 1
+          store.set("last_multiplayer", self.multiplayer)
+          if self.multiplayer
+            self.mode = "controls"
+            self.menu_index = self.separate ? 1 : 0
+          else
+            self.new_match(false)
+          end
+        end
+      end
+    elif self.mode == "controls"
+      if key == "left" || key == "right" self.menu_index = 1 - self.menu_index end
+      if key == "b" self.menu() return end
+      if key == "a"
+        self.separate = self.menu_index == 1
+        store.set("separate_controls", self.separate)
+        self.new_match(false)
+      end
+    elif self.mode == "scores"
+      if key == "left" self.rank = max(0, self.rank - 1) end
+      if key == "right" self.rank = min(max(0, size(self.board) - 1), self.rank + 1) end
+      if key == "a" || key == "b" self.menu() return end
+    elif self.mode == "ready"
+      if key == "b" self.menu() return end
+      if key == "a"
+        if self.separate && (slot != self.logical + 1 || !gamepad.ready(slot)) return end
+        self.player = slot
+        self.mode = "countdown"
+        self.countdown_at = now_ms()
+        self.gated = true
+      end
+    elif self.mode == "run"
+      if key == "a" self.jump() end
+      if key == "pause" self.pause() end
+    elif self.mode == "pause"
+      if key == "b" self.menu() return end
+      if key == "a" || key == "pause"
+        if self.recover
+          # A fresh confirmation binds the active logical player to this slot.
+          if slot > 0 && !gamepad.ready(slot) return end
+          if self.separate && slot == 0 return end
+          self.player = slot
+          self.recover = false
+        end
+        self.pause()
+      end
+    elif self.mode == "initials"
+      if self.separate && slot != self.completed[self.pending] + 1 return end
+      if key == "left" self.initials[self.letter] = (self.initials[self.letter] + 25) % 26 end
+      if key == "right" self.initials[self.letter] = (self.initials[self.letter] + 1) % 26 end
+      if key == "b" self.letter = max(0, self.letter - 1) end
+      if key == "a"
+        if self.letter < 2
+          self.letter += 1
+        else
+          self.add_record(self.initials_text(), self.scores[self.completed[self.pending]])
+          self.pending += 1
+          self.next_initials()
+        end
+      end
+    elif self.mode == "results"
+      if key == "left" || key == "right" self.menu_index = 1 - self.menu_index end
+      if key == "b" self.menu() return end
+      if key == "a"
+        if self.menu_index == 0 self.new_match(true) else self.menu() end
+      end
+    end
+    # Every menu action waits for release before another action can be accepted.
+    if self.mode != "run" self.gated = true end
   end
 
   def on_button_event(btn, event)
-    if btn == "right"
-      if event == "press" self.local_duck = true end
-      if event == "release" self.local_duck = false end
+    if event == "release"
+      if btn == "right" self.local_duck = false end
+      if btn == "select" self.local_jump = false end
+      self.local_pressed = false
       return true
     end
-    if btn == "select" && event == "release" self.local_jump = false end
-    if event == "press"
+    if event != "press" return true end
+    self.local_pressed = true
+    if self.gated return true end
+    if self.mode == "run"
+      if self.player != 0 return true end
+      if btn == "right" self.local_duck = true end
       if btn == "select"
         self.local_jump = true
-        self.jump()
+        self.action("a", 0)
       end
-      if btn == "left" self.pause() end
+      if btn == "left" self.action("pause", 0) end
+    else
+      if btn == "left" self.action("left", 0) end
+      if btn == "right" self.action("right", 0) end
+      if btn == "select" self.action("a", 0) end
     end
     return true
+  end
+
+  def pause()
+    if self.mode == "run"
+      self.mode = "pause"
+      self.jump_until = 0
+    elif self.mode == "pause"
+      self.mode = "run"
+      self.gated = true
+    end
+    self.accumulator = 0
+    self.last = now_ms()
   end
 
   def step()
@@ -226,61 +449,67 @@ class DinoRunner
     var ms = now_ms()
     var elapsed = clamp(ms - self.last, 0, 100)
     self.last = ms
-    # Read controls before visual work, using one button snapshot per player.
-    var mask1 = gamepad.buttons(1)
-    var mask2 = gamepad.buttons(2)
-    var next_player = self.player
-    if !gamepad.ready(self.player)
-      if gamepad.ready(1) next_player = 1
-      elif gamepad.ready(2) next_player = 2
-      end
-    elif self.mode == "ready" || self.mode == "dead" || self.demo
-      if mask1 != 0 next_player = 1
-      elif mask2 != 0 next_player = 2
+    var masks = [gamepad.buttons(1), gamepad.buttons(2)]
+    var names = [gamepad.ready(1) ? gamepad.name(1) : "", gamepad.ready(2) ? gamepad.name(2) : ""]
+    if (self.mode == "run" || self.mode == "countdown") && self.player > 0
+      if !gamepad.ready(self.player) || names[0] != self.pad_names[0] || names[1] != self.pad_names[1]
+        self.mode = "pause"
+        self.recover = true
+        self.jump_until = 0
+        self.gated = true
       end
     end
-    if next_player != self.player
-      gamepad.release(self, self.player)
-      self.player = next_player
-      self.before = 0
-      self.up_before = false
+    self.pad_names = names
+    gamepad.claim(self, 1)
+    gamepad.claim(self, 2)
+    var neutral = masks[0] == 0 && masks[1] == 0 && !self.local_pressed
+    for slot : 1..2
+      var dir = gamepad.dir(slot)
+      if dir != nil && (dir[0] != 0 || dir[1] != 0) neutral = false end
     end
-    if gamepad.ready(self.player)
-      gamepad.claim(self, self.player)
-      self.pad_label = "DINO P" + str(self.player)
+    if self.gated
+      if neutral self.gated = false end
     else
-      self.pad_label = "NO PAD"
+      for slot : 1..2
+        var buttons = masks[slot - 1]
+        var newly = buttons & (~self.previous[slot - 1])
+        var dir = gamepad.dir(slot)
+        var dx = dir == nil ? 0 : dir[0]
+        var dy = dir == nil ? 0 : dir[1]
+        var allowed = self.mode != "run" && self.mode != "countdown" && self.mode != "pause"
+        allowed = allowed || slot == self.player || self.recover
+        if allowed
+          if (newly & gamepad.bit("SELECT")) != 0 self.quit() return end
+          if (newly & gamepad.bit("START")) != 0 self.action("pause", slot)
+          elif (newly & gamepad.bit("A")) != 0 || (dy < 0 && self.up_previous[slot - 1] >= 0) self.action("a", slot)
+          elif (newly & gamepad.bit("B")) != 0 self.action("b", slot)
+          elif dx < 0 && self.dx_previous[slot - 1] >= 0 self.action("left", slot)
+          elif dx > 0 && self.dx_previous[slot - 1] <= 0 self.action("right", slot)
+          end
+        end
+        self.up_previous[slot - 1] = dy
+        self.dx_previous[slot - 1] = dx
+        if self.gated break end
+      end
     end
-    var buttons = self.player == 1 ? mask1 : mask2
-    var newly = buttons & (~self.before)
-    var d = gamepad.dir(self.player)
-    var up = d != nil && d[1] < 0
-    var down = d != nil && d[1] > 0
-    var a_held = (buttons & gamepad.bit("A")) != 0
-    var b_held = (buttons & gamepad.bit("B")) != 0
-    self.duck = self.y <= 0.0 && (self.local_duck || down || b_held)
-    var jump_press = (newly & gamepad.bit("A")) != 0 || (up && !self.up_before)
-    var pause_press = (newly & gamepad.bit("START")) != 0
-    var quit_press = (newly & gamepad.bit("SELECT")) != 0
-    self.before = buttons
-    self.up_before = up
+    self.previous = masks
+    if self.mode == "countdown"
+      if ms - self.countdown_at >= 3000
+        self.seed = self.match_seed
+        self.start(false)
+        self.gated = true
+      end
+      return
+    end
+    if self.mode != "run" self.accumulator = 0 return end
+    var buttons = self.player > 0 ? masks[self.player - 1] : 0
+    var dir = self.player > 0 ? gamepad.dir(self.player) : nil
+    var up = dir != nil && dir[1] < 0
+    var down = dir != nil && dir[1] > 0
+    self.jump_held = !self.gated && (self.local_jump || (buttons & gamepad.bit("A")) != 0 || up)
+    self.duck = !self.gated && self.y <= 0.0 && (self.local_duck || down || (buttons & gamepad.bit("B")) != 0)
+    self.scene_ms += elapsed
     if self.matrix self.rain_step(elapsed) end
-    if quit_press
-      rotation.resume()
-      rotation.close()
-      return
-    end
-    if pause_press
-      if self.demo self.start(false) else self.pause() end
-    end
-    self.jump_held = self.local_jump || a_held || up
-    if jump_press self.jump() end
-    if self.mode != "run"
-      self.accumulator = 0
-      return
-    end
-    # Jumps intentionally extend above the screen; drawing is clipped.
-    # Fixed 25ms physics, at most four catch-up steps after a delay.
     self.accumulator += elapsed
     while self.accumulator >= 25 && self.mode == "run"
       self.accumulator -= 25
@@ -371,10 +600,7 @@ class DinoRunner
         if self.demo
           self.start(true)
         else
-          self.mode = "dead"
-          self.play_event("over")
-          self.idle_since = now_ms()
-          self.save_best()
+          self.finish_run()
         end
         return
       end
@@ -481,7 +707,7 @@ class DinoRunner
   def atmosphere()
     if self.matrix return end
     self.mist()
-    var t = now_ms() / 1000.0
+    var t = self.scene_ms / 1000.0
     if self.stage % 2 == 1
       for star : self.stars
         var twinkle = int(45 + 140 * (0.5 + 0.5 * math.sin(t * 2.2 + star[2])))
@@ -492,7 +718,7 @@ class DinoRunner
 
   def mist()
     if !self.haze || self.haze_intensity <= 0 return end
-    var t = now_ms() / 1000.0
+    var t = self.scene_ms / 1000.0
     var r = (self.bg >> 16) & 255
     var g = (self.bg >> 8) & 255
     var b = self.bg & 255
@@ -522,7 +748,7 @@ class DinoRunner
       self.ground = 0x009933
       return
     end
-    self.tint = store.get("dino_color", 0x3399FF)
+    self.tint = self.logical == 1 ? store.get("p2_color", 0xFF3355) : store.get("dino_color", 0x3399FF)
     if self.stage % 2 == 0
       # Dim daylight avoids a glaring full-brightness white LED background.
       self.bg = self.day_color
@@ -565,7 +791,84 @@ class DinoRunner
     end
   end
 
+  def draw_menu()
+    var color = self.matrix ? 0x66FF88 : (self.logical == 1 ? store.get("p2_color", 0xFF3355) : store.get("dino_color", 0x3399FF))
+    var title = "DINO"
+    var detail = ""
+    if self.mode == "menu"
+      var items = ["SOLO", "2 PLAYERS", "HIGH SCORE", "QUIT"]
+      title = items[self.menu_index]
+      detail = "<  A:OK  >"
+    elif self.mode == "controls"
+      title = self.menu_index == 0 ? "SHARED" : "SEPARATE"
+      detail = "<  A:OK  >"
+    elif self.mode == "ready"
+      title = "P" + str(self.logical + 1) + " READY"
+      detail = "A: START"
+    elif self.mode == "countdown"
+      title = "P" + str(self.logical + 1)
+      detail = str(max(1, 3 - (now_ms() - self.countdown_at) / 1000))
+    elif self.mode == "pause"
+      title = self.recover ? "PAD LOST" : "PAUSED"
+      detail = "A:RESUME"
+    elif self.mode == "initials"
+      title = "P" + str(self.completed[self.pending] + 1) + " TOP 5"
+      detail = self.initials_text()
+      line(self.letter * 4, 15, self.letter * 4 + 2, 15, color)
+    elif self.mode == "scores"
+      title = "TOP 5"
+      detail = size(self.board) == 0 ? "NO SCORES" : str(self.rank + 1) + " " + self.board[self.rank][0] + " " + str(self.board[self.rank][1])
+    elif self.mode == "results"
+      if self.multiplayer
+        title = self.scores[0] == self.scores[1] ? "DRAW" : (self.scores[0] > self.scores[1] ? "P1 WINS!" : "P2 WINS!")
+        if (now_ms() / 2000) % 2 == 1 title = "1:" + str(self.scores[0]) + " 2:" + str(self.scores[1]) end
+      else
+        title = "S:" + str(self.scores[0])
+      end
+      detail = self.menu_index == 0 ? "A:REMATCH" : "A:MENU"
+    end
+    self.small_text(title, 0, 1, color)
+    self.small_text(detail, 0, 9, 0xAABBAA)
+  end
+
+  def small_text(value, x, y, color)
+    # Custom compact 3x5 font keeps labels within 52 columns.
+    var font = {
+      "A":[2,5,7,5,5],"B":[6,5,6,5,6],"C":[3,4,4,4,3],"D":[6,5,5,5,6],
+      "E":[7,4,6,4,7],"F":[7,4,6,4,4],"G":[3,4,5,5,3],"H":[5,5,7,5,5],
+      "I":[7,2,2,2,7],"J":[1,1,1,5,2],"K":[5,5,6,5,5],"L":[4,4,4,4,7],
+      "M":[5,7,7,5,5],"N":[5,7,7,7,5],"O":[2,5,5,5,2],"P":[6,5,6,4,4],
+      "Q":[2,5,5,3,1],"R":[6,5,6,5,5],"S":[3,4,2,1,6],"T":[7,2,2,2,2],
+      "U":[5,5,5,5,7],"V":[5,5,5,5,2],"W":[5,5,7,7,5],"X":[5,5,2,5,5],
+      "Y":[5,5,2,2,2],"Z":[7,1,2,4,7],":":[0,2,0,2,0],"!":[2,2,2,0,2],
+      "<":[1,2,4,2,1],">":[4,2,1,2,4]," ":[0,0,0,0,0]}
+    for i : 0..size(value)-1
+      if x + i * 4 + 2 >= width() break end
+      var c = value[i..i]
+      var rows = font.find(c)
+      if rows == nil
+        var digit = int(c)
+        if digit != nil && digit >= 0 && digit <= 9 rows = self.digits[digit] end
+      end
+      if rows != nil
+        for yy : 0..4
+          for xx : 0..2
+            if (rows[yy] & (1 << (2-xx))) != 0 pixel(x+i*4+xx,y+yy,color) end
+          end
+        end
+      end
+    end
+  end
+
   def hud()
+    if self.multiplayer && self.turn == 1
+      self.small_text("T" + str(min(9999, self.scores[self.order[0]])), 0, 0, self.gold)
+      self.tiny_number(min(9999, self.score), width() - size(str(min(9999,self.score))) * 4, self.fg)
+      if self.score > self.scores[self.order[0]] && self.score <= self.scores[self.order[0]] + 15
+        line(23, 0, 23, 3, self.tint)
+      end
+      return
+    end
     # H + best on the left, current score on the right. Four digits each.
     line(0, 0, 0, 4, self.gold)
     line(2, 0, 2, 4, self.gold)
@@ -583,21 +886,8 @@ class DinoRunner
     clear()
     rect_fill(0, 0, width(), height(), self.bg)
     if self.matrix self.rain_draw() end
-    if self.mode == "ready"
-      text(1, 6, self.pad_label, self.tint)
-      text(1, 14, "A: RUN", (self.matrix ? 0x66EE88 : 0xAAAAAA))
-      return
-    end
-    if self.mode == "dead"
-      # Alternate final score and high score; A retries.
-      var title = (now_ms() / 2000) % 2 == 0 ? "S:" + self.label : "HI:" + str(self.best)
-      text(0, 6, title, (self.matrix ? 0x66FF88 : 0xFF8844))
-      text(0, 14, "A: RETRY", (self.matrix ? 0x66EE88 : 0xAAAAAA))
-      return
-    end
-    if self.mode == "pause"
-      text(0, 6, "PAUSED", (self.matrix ? 0x55DD77 : 0xFFCC44))
-      text(0, 14, "START", (self.matrix ? 0x66EE88 : 0xAAAAAA))
+    if self.mode != "run"
+      self.draw_menu()
       return
     end
     self.atmosphere()
