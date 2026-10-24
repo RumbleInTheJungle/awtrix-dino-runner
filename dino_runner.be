@@ -1,15 +1,11 @@
 # @name Dino Runner
+# @ondemand
+# @config debug bool "Debug logging" default=false group="Diagnostics"
 # @config dino_color color "Dino color" default=#3399FF
-# @config switch_score number "Day/night switch score (100–10000 pixels)" default=700 min=100 max=10000 step=100 unit=pixels
-# @config difficulty number "Speed increase per switch (0–25%)" default=5 min=0 max=25 step=1 unit=%
-# @config start_speed number "Start speed (8–40 px/s)" default=20 min=8 max=40 step=1 unit=px/s
-# @config reset_best bool "Reset high score (one shot)" default=false
-# @config type_randomness slider "Obstacle type randomness (0–100%)" default=100 min=0 max=100 unit=%
-# @config distance_randomness slider "Obstacle distance randomness (0–100%)" default=100 min=0 max=100 unit=%
+# @config reset_best bool "Reset high scores (one shot)" default=false
 # @config daylight color "Daylight color" default=#181E14
 # @config haze bool "Moving haze" default=false
 # @config haze_intensity slider "Haze intensity (0–100%)" default=25 min=0 max=100 unit=%
-# @config matrix bool "Matrix graphics" default=false
 # @config matrix_brightness slider "Matrix rain brightness (0–100%)" default=40 min=0 max=100 unit=%
 # @config sounds bool "Game sounds" default=true
 # @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=%
@@ -62,8 +58,8 @@ class DinoRunner
         self.drops.push([-self.rain_random(20) * 1.0, 4 + self.rain_random(9), 10 + self.rain_random(6)])
       end
     end
-    self.type_randomness = int(clamp(num(store.get("type_randomness"), 100), 0, 100))
-    self.distance_randomness = int(clamp(num(store.get("distance_randomness"), 100), 0, 100))
+    self.type_randomness = 100
+    self.distance_randomness = 100
     self.day_color = store.get("daylight")
     self.haze = store.get("haze")
     self.haze_intensity = clamp(num(store.get("haze_intensity"), 25), 0, 100)
@@ -74,9 +70,9 @@ class DinoRunner
     self.jump_gravity = 24.0
     self.stars = [[22,1,7],[29,6,13],[35,2,19],[48,7,31],[18,7,43],[39,6,59]]
     self.tint = store.get("dino_color", 0x3399FF)
-    self.switch_score = int(clamp(num(store.get("switch_score", 700), 700), 100, 10000))
-    self.difficulty = clamp(num(store.get("difficulty", 5), 5), 0, 25)
-    self.initial_speed = clamp(num(store.get("start_speed"), 20), 8, 40)
+    self.switch_score = 500
+    self.difficulty = 5
+    self.initial_speed = 30
     self.speed = self.initial_speed * 1.0
     self.distance = 0.0
     self.stage = 0
@@ -271,7 +267,7 @@ class DinoRunner
     if self.matrix self.rain_step(elapsed) end
     if quit_press
       rotation.resume()
-      rotation.next()
+      rotation.close()
       return
     end
     if pause_press
@@ -279,9 +275,6 @@ class DinoRunner
     end
     self.jump_held = self.local_jump || a_held || up
     if jump_press self.jump() end
-    if (self.mode == "ready" || self.mode == "dead") && ms - self.idle_since >= 10000
-      self.start(true)
-    end
     if self.mode != "run"
       self.accumulator = 0
       return
@@ -313,7 +306,7 @@ class DinoRunner
       self.stage += 1
       # Starting-speed limits do not cap speed earned during a run.
       self.speed *= 1.0 + self.difficulty / 100.0
-      log(format("Dino stage %d: %.2f px/s", self.stage, self.speed))
+      if store.get("debug", false) log(format("Dino stage %d: %.2f px/s", self.stage, self.speed)) end
       self.palette()
       self.play_event("switch")
     end
