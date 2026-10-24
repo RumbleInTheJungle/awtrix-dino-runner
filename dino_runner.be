@@ -1,17 +1,26 @@
 # @name Dino Runner
+# @desc Turn-based dinosaur runner with ten pixel worlds
+# @version 0.1.0
+# @display 52x16
 # @ondemand
+# @config world_mode select "World mode" options=auto,fixed default=auto group="Worlds"
+# @config fixed_world select "Fixed world" options=1,2,3,4,5,6,7,8,9,10 default=1 group="Worlds" help="1 Grassland, 2 Desert, 3 Jungle, 4 City, 5 Ice, 6 Volcano, 7 Moon, 8 Storm, 9 Crystal, 10 Matrix"
+# @config parallax_enabled bool "Scrolling scenery" default=true group="Worlds"
+# @config parallax_intensity slider "Parallax intensity" default=100 min=0 max=100 unit=% group="Worlds"
+# @config ambient_effects bool "Ambient effects" default=true group="Worlds"
+# @config ambient_density slider "Ambient effect density" default=25 min=0 max=100 unit=% group="Worlds"
 # @config p2_color color "P2 dino color" default=#FF3355 group="Players"
 # @config debug bool "Debug logging" default=false group="Diagnostics"
 # @config dino_color color "P1 / solo dino color" default=#3399FF group="Players"
-# @config reset_best bool "Reset high scores (one shot)" default=false
-# @config daylight color "Daylight color" default=#181E14
-# @config haze bool "Moving haze" default=false
-# @config haze_intensity slider "Haze intensity (0–100%)" default=25 min=0 max=100 unit=%
-# @config matrix_brightness slider "Matrix rain brightness (0–100%)" default=40 min=0 max=100 unit=%
-# @config sounds bool "Game sounds" default=true
-# @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=%
-# Native AWTRIX NG TC002 game, 52x16. No server or MQTT required.
-# Player 1: A jump/start/retry, B or D-pad down duck, START pause,
+# @config reset_best bool "Reset high scores (one shot)" default=false group="Scores"
+# @config daylight color "Daylight color" default=#181E14 group="Worlds"
+# @config haze bool "Moving haze" default=false group="Worlds"
+# @config haze_intensity slider "Haze intensity (0–100%)" default=25 min=0 max=100 unit=% group="Worlds"
+# @config matrix_brightness slider "Matrix rain brightness (0–100%)" default=40 min=0 max=100 unit=% group="Worlds"
+# @config sounds bool "Game sounds" default=true group="Sound"
+# @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=% group="Sound"
+# Native AWTRIX NG TC002 on-demand game, 52x16. No server or MQTT required.
+# Active player: A jump/start/retry, B or D-pad down duck, START pause,
 # SELECT quit. Clock: select jump/retry, right hold duck, left pause.
 
 import gamepad
@@ -33,11 +42,26 @@ class DinoRunner
   var board, pending, initials, letter, menu_index, rank, gated, recover, countdown_at
   var previous, up_previous, dx_previous, pad_names, local_pressed, scene_ms
 
+  var worlds, world, next_world, old_colors, colors, transition_at, hills
+  var parallax, parallax_intensity, ambient, density, fixed_world, world_auto
+  var font, fx_budget, bindings, left_pending
+
   def init()
+    self.font = {
+      "A":[2,5,7,5,5],"B":[6,5,6,5,6],"C":[3,4,4,4,3],"D":[6,5,5,5,6],
+      "E":[7,4,6,4,7],"F":[7,4,6,4,4],"G":[3,4,5,5,3],"H":[5,5,7,5,5],
+      "I":[7,2,2,2,7],"J":[1,1,1,5,2],"K":[5,5,6,5,5],"L":[4,4,4,4,7],
+      "M":[5,7,7,5,5],"N":[5,7,7,7,5],"O":[2,5,5,5,2],"P":[6,5,6,4,4],
+      "Q":[2,5,5,3,1],"R":[6,5,6,5,5],"S":[3,4,2,1,6],"T":[7,2,2,2,2],
+      "U":[5,5,5,5,7],"V":[5,5,5,5,2],"W":[5,5,7,7,5],"X":[5,5,2,5,5],
+      "Y":[5,5,2,2,2],"Z":[7,1,2,4,7],":":[0,2,0,2,0],"!":[2,2,2,0,2],
+      "<":[1,2,4,2,1],">":[4,2,1,2,4]," ":[0,0,0,0,0]}
     self.mode = "menu"
     self.multiplayer = store.get("last_multiplayer", false)
     self.separate = store.get("separate_controls", false)
     self.menu_index = self.multiplayer ? 1 : 0
+    self.bindings = [1, 2]
+    self.left_pending = false
     self.logical = 0
     self.first = 0
     self.scores = [0, 0]
@@ -77,15 +101,18 @@ class DinoRunner
     }
     self.player = 1
     self.pad_label = "NO PAD"
-    self.matrix = store.get("matrix")
-    self.matrix_brightness = int(clamp(num(store.get("matrix_brightness"), 40), 0, 100))
-    self.rain_seed = now_ms() % 65521 + 17
-    self.drops = []
-    if self.matrix
-      for x : 0 .. width() - 1
-        self.drops.push([-self.rain_random(20) * 1.0, 4 + self.rain_random(9), 10 + self.rain_random(6)])
+    if store.get("world_schema", 0) != 1
+      if store.get("matrix", false)
+        store.set("world_mode", "fixed")
+        store.set("fixed_world", "10")
       end
+      store.set("world_schema", 1)
     end
+    self.matrix = false
+    self.matrix_brightness = int(clamp(num(store.get("matrix_brightness"),40),0,100))
+    self.rain_seed = now_ms()%65521+17
+    self.fx_budget = 100
+    self.init_worlds()
     self.type_randomness = 100
     self.distance_randomness = 100
     self.day_color = store.get("daylight")
@@ -114,9 +141,9 @@ class DinoRunner
     end
     self.board = []
     var saved = store.get("leaderboard", [])
-    if type(saved) == "list"
+    if isinstance(saved, list)
       for row : saved
-        if type(row) == "list" && size(row) == 2 && type(row[0]) == "string" && size(row[0]) == 3 && type(row[1]) == "int" && row[1] > 0
+        if isinstance(row, list) && size(row) == 2 && type(row[0]) == "string" && size(row[0]) == 3 && type(row[1]) == "int" && row[1] > 0
           self.add_record(row[0], row[1])
         end
       end
@@ -166,10 +193,6 @@ class DinoRunner
     self.last = now_ms()
     self.gated = true
     rotation.pause()
-  end
-
-  def save_best()
-    # Records are saved only after a completed run and initials entry.
   end
 
   def on_hide()
@@ -259,7 +282,7 @@ class DinoRunner
 
   def prepare_turn()
     self.logical = self.multiplayer ? self.order[self.turn] : 0
-    self.player = self.separate ? self.logical + 1 : 1
+    self.player = self.multiplayer && self.separate ? self.bindings[self.logical] : 1
     self.mode = "ready"
     self.gated = true
     self.recover = false
@@ -297,6 +320,7 @@ class DinoRunner
       self.pending += 1
     end
     self.mode = "results"
+    self.play_event("record")
     self.menu_index = 0
     self.gated = true
   end
@@ -360,7 +384,12 @@ class DinoRunner
     elif self.mode == "ready"
       if key == "b" self.menu() return end
       if key == "a"
-        if self.separate && (slot != self.logical + 1 || !gamepad.ready(slot)) return end
+        if self.multiplayer && self.separate
+          if slot == 0 || !gamepad.ready(slot) return end
+          var expected = self.bindings[self.logical]
+          if gamepad.ready(expected) && slot != expected return end
+          self.bindings[self.logical] = slot
+        end
         self.player = slot
         self.mode = "countdown"
         self.countdown_at = now_ms()
@@ -375,14 +404,15 @@ class DinoRunner
         if self.recover
           # A fresh confirmation binds the active logical player to this slot.
           if slot > 0 && !gamepad.ready(slot) return end
-          if self.separate && slot == 0 return end
+          if self.multiplayer && self.separate && slot == 0 return end
           self.player = slot
+          if self.multiplayer && self.separate self.bindings[self.logical] = slot end
           self.recover = false
         end
         self.pause()
       end
     elif self.mode == "initials"
-      if self.separate && slot != self.completed[self.pending] + 1 return end
+      if self.multiplayer && self.separate && slot > 0 && slot != self.bindings[self.completed[self.pending]] return end
       if key == "left" self.initials[self.letter] = (self.initials[self.letter] + 25) % 26 end
       if key == "right" self.initials[self.letter] = (self.initials[self.letter] + 1) % 26 end
       if key == "b" self.letter = max(0, self.letter - 1) end
@@ -407,10 +437,19 @@ class DinoRunner
   end
 
   def on_button_event(btn, event)
+    if btn == "left" && event == "long" && self.left_pending
+      self.left_pending = false
+      self.action("b", 0)
+      return true
+    end
     if event == "release"
       if btn == "right" self.local_duck = false end
       if btn == "select" self.local_jump = false end
       self.local_pressed = false
+      if btn == "left" && self.left_pending
+        self.left_pending = false
+        self.action("left", 0)
+      end
       return true
     end
     if event != "press" return true end
@@ -425,7 +464,9 @@ class DinoRunner
       end
       if btn == "left" self.action("pause", 0) end
     else
-      if btn == "left" self.action("left", 0) end
+      if btn == "left"
+        if self.mode == "initials" self.left_pending = true else self.action("left", 0) end
+      end
       if btn == "right" self.action("right", 0) end
       if btn == "select" self.action("a", 0) end
     end
@@ -492,6 +533,11 @@ class DinoRunner
         if self.gated break end
       end
     end
+    for slot : 1..2
+      var d = gamepad.dir(slot)
+      self.up_previous[slot-1] = d == nil ? 0 : d[1]
+      self.dx_previous[slot-1] = d == nil ? 0 : d[0]
+    end
     self.previous = masks
     if self.mode == "countdown"
       if ms - self.countdown_at >= 3000
@@ -509,7 +555,7 @@ class DinoRunner
     self.jump_held = !self.gated && (self.local_jump || (buttons & gamepad.bit("A")) != 0 || up)
     self.duck = !self.gated && self.y <= 0.0 && (self.local_duck || down || (buttons & gamepad.bit("B")) != 0)
     self.scene_ms += elapsed
-    if self.matrix self.rain_step(elapsed) end
+    if self.ambient && self.density > 0 && self.fx_budget > 0 self.rain_step(elapsed) end
     self.accumulator += elapsed
     while self.accumulator >= 25 && self.mode == "run"
       self.accumulator -= 25
@@ -597,11 +643,7 @@ class DinoRunner
       var oy = o[1] == 1 ? 8 : 14 - o[3]
       # Exclusive right/bottom edges: a shared edge is not a collision.
       if 6 < ox + o[2] && 6 + pw > ox && py < oy + o[3] && py + ph > oy
-        if self.demo
-          self.start(true)
-        else
-          self.finish_run()
-        end
+        self.finish_run()
         return
       end
     end
@@ -688,6 +730,7 @@ class DinoRunner
     # Direct brightness scaling: no minimum, no gamma lift, no forced lit tail.
     var peak = 144.0 * self.matrix_brightness / 100.0
     for x : 0 .. width() - 1
+      if x % max(1, 101 / max(1,min(self.density,self.fx_budget))) != 0 continue end
       var drop = self.drops[x]
       var head = int(drop[0])
       var length = drop[2]
@@ -700,18 +743,6 @@ class DinoRunner
         if py >= 0 && py < height() && green > 0
           pixel(x, py, rgb(0, green, 0))
         end
-      end
-    end
-  end
-
-  def atmosphere()
-    if self.matrix return end
-    self.mist()
-    var t = self.scene_ms / 1000.0
-    if self.stage % 2 == 1
-      for star : self.stars
-        var twinkle = int(45 + 140 * (0.5 + 0.5 * math.sin(t * 2.2 + star[2])))
-        pixel(star[0], star[1], rgb(twinkle, twinkle, min(255, twinkle + 25)))
       end
     end
   end
@@ -739,27 +770,269 @@ class DinoRunner
     end
   end
 
+  def init_worlds()
+    # bg, far, mid, near, ground, soil, hazard light, hazard shade, sky accent
+    self.worlds = [
+      [0x06121A,0x0B2530,0x123921,0x285532,0x78A84B,0x322416,0x88C86A,0x547B45,0xB5993A],
+      [0x1C0D03,0x3C180A,0x512B0E,0x64431C,0xBE9644,0x4B3014,0x67C46D,0xAD8655,0xD6AA42],
+      [0x020C09,0x082017,0x15382C,0x305D38,0x6E9266,0x202E27,0xB5BBA0,0x6A8665,0x438A58],
+      [0x020310,0x0D1029,0x22203B,0x473049,0x25A7BC,0x101C35,0xF28ACC,0xC7A850,0x4A83A0],
+      [0x030B1C,0x182C48,0x28495B,0x406C79,0xB9DDDF,0x183C55,0x8BE6ED,0x5FADCF,0x8AA9BE],
+      [0x100303,0x24090A,0x3D1410,0x5B2113,0xC45327,0x3E1110,0xEEA34A,0xAC6658,0xC46E28],
+      [0x01020A,0x151526,0x303043,0x48475A,0x9DA2B4,0x25293A,0xBDCAD7,0x7496AE,0x287F8B],
+      [0x040611,0x10152A,0x192A34,0x344243,0x607C71,0x22252F,0xA4B8C4,0x6C927C,0x607894],
+      [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4],
+      [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55]
+    ]
+    self.hills = [0,0,1,1,2,3,3,4,4,3,2,2,1,0,0,1,2,3,3,2,1,1,0,0,1,0]
+    self.world = 0
+    self.next_world = 0
+    self.old_colors = self.worlds[0]
+    self.colors = self.worlds[0]
+    self.transition_at = -1000
+    self.parallax = store.get("parallax_enabled", true)
+    self.parallax_intensity = clamp(num(store.get("parallax_intensity"),100),0,100)/100.0
+    self.ambient = store.get("ambient_effects", true)
+    self.density = int(clamp(num(store.get("ambient_density"),25),0,100))
+    self.fixed_world = int(clamp(num(store.get("fixed_world"),1),1,10))-1
+    self.world_auto = store.get("world_mode", "auto") == "auto"
+    # Seeded once, bounded, and independent of obstacle RNG.
+    self.drops = []
+    for x : 0..width()-1
+      self.drops.push([-self.rain_random(20)*1.0,4+self.rain_random(9),10+self.rain_random(6)])
+    end
+  end
+
+  def blend(a,b,f)
+    var r = int(((a>>16)&255)*(1.0-f)+((b>>16)&255)*f)
+    var g = int(((a>>8)&255)*(1.0-f)+((b>>8)&255)*f)
+    var blue = int((a&255)*(1.0-f)+(b&255)*f)
+    return rgb(r,g,blue)
+  end
+
   def palette()
+    var desired = self.world_auto ? (self.stage / 2) % 10 : self.fixed_world
+    var target = self.worlds[desired]
+    var next = []
+    for c : target
+      # Permanent night/cavern worlds retain their identity at every milestone.
+      var night = self.stage % 2 == 1 && (desired == 0 || desired == 1 || desired == 2 || desired == 4 || desired == 6)
+      next.push(night ? self.blend(0x000008,c,0.60) : c)
+    end
+    if desired == 0 && self.stage % 2 == 0 next[0] = self.blend(next[0],self.day_color,0.35) end
+    if self.distance == 0.0
+      self.old_colors = next
+      self.colors = next
+      self.world = desired
+      self.next_world = desired
+      self.transition_at = -1000
+    else
+      self.old_colors = self.colors
+      self.colors = next
+      self.next_world = desired
+      self.transition_at = self.scene_ms
+    end
+    self.apply_palette()
+  end
+
+  def apply_palette()
+    var phase = clamp((self.scene_ms-self.transition_at)/500.0,0.0,1.0)
+    if phase >= 0.5 self.world = self.next_world end
+    self.matrix = self.world == 9
+    self.bg = self.blend(self.old_colors[0],self.colors[0],phase)
+    self.ground = self.blend(self.old_colors[4],self.colors[4],phase)
+    self.tint = self.matrix ? 0x66FF88 : (self.logical == 1 ? store.get("p2_color",0xFF3355) : store.get("dino_color",0x3399FF))
+    self.fg = self.matrix ? 0x66EE88 : 0xCCDDCC
+    self.gold = self.matrix ? 0x55DD77 : 0xFFCC55
+  end
+
+  def shade(index)
+    var phase = clamp((self.scene_ms-self.transition_at)/500.0,0.0,1.0)
+    return self.blend(self.old_colors[index],self.colors[index],phase)
+  end
+
+  def offset(rate)
+    return self.parallax ? round(self.distance*rate*self.parallax_intensity) : 0
+  end
+
+  def scenery()
+    var w = self.world
+    var far = self.shade(1)
+    var mid = self.shade(2)
+    var near = self.shade(3)
+    var accent = self.shade(8)
+    var f = self.offset(0.04)
+    var m = self.offset(0.10)
+    var n = self.offset(0.24)
+    # Per-column strips wrap at 104 pixels, including all edge columns.
+    for x : 0..51
+      var a = (x+f)%104
+      var b = (x+m)%104
+      var h = self.hills[(a/2)%26]
+      var j = self.hills[b%26]
+      if w == 0 || w == 1 || w == 4 || w == 6 || w == 7
+        line(x,12-h,x,13,far)
+        line(x,13-j/2,x,13,mid)
+      elif w == 2
+        line(x,6+h/2,x,9+h/2,far)
+        if b%13 < 2 line(x,7,x,13,mid) end
+      elif w == 3 || w == 9
+        var top = 7+(a/7)%4
+        line(x,top,x,13,far)
+        if b%17 < 8
+          line(x,8+(b/17)%3,x,13,mid)
+          if b%4 == 0 pixel(x,10,near) end
+        end
+      elif w == 5 || w == 8
+        line(x,6,x,6+h,far)
+        if b%21 < 4 line(x,6,x,8+j/2,mid) end
+        if a%29 < 2 line(x,10,x,13,far) end
+      end
+    end
+    # Small motifs give each world a readable identity without filling the sky.
+    for i : 0..3
+      var x = (i*26-m%104+104)%104-13
+      if w == 0
+        line(x,9,x+3,9,mid)
+        pixel(x+1,8,mid)
+      elif w == 1
+        line(x,10,x,13,mid)
+        line(x-1,11,x+1,11,mid)
+      elif w == 2
+        rect_fill(x,10,3,4,mid)
+        line(x-1,10,x+3,10,near)
+        pixel(x+1,12,far)
+      elif w == 3
+        line(x,8,x,12,near)
+        pixel(x+2,9,accent)
+      elif w == 4
+        line(x,10,x,13,mid)
+        line(x-1,11,x+1,11,near)
+        pixel(x,10,accent)
+      elif w == 5
+        line(x,7,x,9,near)
+        pixel(x,8,accent)
+      elif w == 6
+        line(x,11,x+4,11,mid)
+        rect_fill(x-1,12,7,2,mid)
+        line(x+2,9,x+2,10,near)
+      elif w == 7
+        line(x,10,x,13,mid)
+        line(x-1,11,x+1,12,mid)
+      elif w == 8
+        line(x,9,x,12,near)
+        pixel(x-1,11,mid)
+        pixel(x+1,11,mid)
+      else
+        rect_fill(x,10,5,3,mid)
+        line(x,10,x+4,10,near)
+      end
+    end
+    # Sky accents stay below the HUD and above the normal runner silhouette.
+    var sky_x = (43-f%104+104)%104
+    if w == 0 || w == 1
+      if self.stage%2 == 0
+        circle_fill(sky_x,7,1,accent)
+      else
+        pixel(sky_x,6,accent)
+        pixel(sky_x-1,7,accent)
+        pixel(sky_x,8,accent)
+      end
+      var cloud = (25-f%104+104)%104
+      line(cloud,6,cloud+3,6,far)
+    elif w == 6
+      circle_fill(sky_x,7,1,accent)
+    end
+    for i : 0..3
+      var x = (i*13-n%52+52)%52
+      pixel(x,15,near)
+      if w == 0 || w == 2 || w == 7 pixel(x,13,near) end
+      if w == 4 || w == 8 pixel(x+1,15,accent) end
+    end
+    if self.haze && !self.matrix self.mist() end
+    if self.ambient self.world_fx() end
+  end
+
+  def world_fx()
+    if self.density <= 0 || self.fx_budget <= 0 return end
     if self.matrix
-      self.bg = 0x000000
-      self.tint = 0x66FF88
-      self.fg = 0x66EE88
-      self.gold = 0x55DD77
-      self.ground = 0x009933
+      self.rain_draw()
       return
     end
-    self.tint = self.logical == 1 ? store.get("p2_color", 0xFF3355) : store.get("dino_color", 0x3399FF)
-    if self.stage % 2 == 0
-      # Dim daylight avoids a glaring full-brightness white LED background.
-      self.bg = self.day_color
-      self.fg = 0xCCDDCC
-      self.gold = 0xFFCC55
-      self.ground = 0x668855
-    else
-      self.bg = 0x000008
-      self.fg = 0x8899BB
-      self.gold = 0xDDBBFF
-      self.ground = 0x334466
+    var t = self.scene_ms/100
+    var count = 1+min(self.density,self.fx_budget)/34
+    var color = self.shade(8)
+    var w = self.world
+    for i : 0..count-1
+      var x = (17+i*19+t/9)%52
+      var y = 6+(t/4+i*3)%7
+      if w == 4
+        pixel(x,y,color)
+      elif w == 7
+        pixel(x,y,color)
+        pixel(x-1,y+1,self.shade(3))
+      elif w == 5
+        pixel(x,13-(t/3+i*2)%7,color)
+      elif w == 1
+        if t%20 < 3 pixel(x,12,self.shade(3)) end
+      elif w == 2
+        if t%30 < 10 pixel((i*23+t/30)%52,7+(t/5)%2,self.shade(3)) end
+      elif w == 3
+        if t%40 < 8 pixel((i*17+31)%52,8,color) end
+      elif w == 8
+        if t%23 < 3 pixel(x,11,color) end
+      elif w == 6 || (w == 0 && self.stage%2 == 1)
+        if t%30 < 15 pixel((i*19+23)%52,6+i%2,color) end
+      elif w == 0
+        if t%40 < 4 pixel(x,13,self.shade(3)) end
+      end
+    end
+    if w == 7 && t%120 < 2
+      pixel(40,6,color)
+      pixel(39,7,color)
+      pixel(40,8,color)
+    end
+  end
+
+  def draw_obstacles()
+    var light = self.shade(6)
+    var dark = self.shade(7)
+    for o : self.obstacles
+      var x = round(o[0])
+      if x >= width() || x+o[2] < 0 continue end
+      if o[1] == 1
+        pixel(x,9,light)
+        rect_fill(x+1,9,3,1,dark)
+        pixel(x+1,8,light)
+        var wing = (self.ticks/6)%2 == 0 ? 8 : 10
+        line(x+2,wing,x+4,wing,light)
+      elif o[1] == 2
+        line(x+1,11,x+3,11,light)
+        line(x,12,x+4,12,dark)
+        line(x,13,x+4,13,self.blend(0,dark,0.75))
+      elif self.world == 0 || self.world == 1
+        var top = 14-o[3]
+        line(x+2,top,x+2,13,light)
+        line(x,top+1,x,top+2,dark)
+        line(x,top+2,x+2,top+2,dark)
+        line(x+4,top,x+4,top+1,light)
+        line(x+2,top+1,x+4,top+1,light)
+      else
+        var top = 14-o[3]
+        rect_fill(x,top,5,o[3],dark)
+        line(x,top,x+4,top,light)
+        line(x,top,x,13,light)
+        if self.world == 3
+          pixel(x+1,top+1,light)
+          pixel(x+3,top+1,light)
+        elif self.world == 4 || self.world == 8
+          line(x+2,top,x+2,13,light)
+        elif self.world == 2
+          line(x+1,12,x+3,12,self.shade(3))
+        elif self.world == 9
+          line(x+4,top,x+4,13,light)
+        end
+      end
     end
   end
 
@@ -812,20 +1085,31 @@ class DinoRunner
       title = self.recover ? "PAD LOST" : "PAUSED"
       detail = "A:RESUME"
     elif self.mode == "initials"
-      title = "P" + str(self.completed[self.pending] + 1) + " TOP 5"
+      var entering = self.completed[self.pending]
+      color = self.matrix ? 0x66FF88 : (entering == 1 ? store.get("p2_color",0xFF3355) : store.get("dino_color",0x3399FF))
+      title = "P" + str(entering + 1) + " TOP 5"
       detail = self.initials_text()
       line(self.letter * 4, 15, self.letter * 4 + 2, 15, color)
     elif self.mode == "scores"
-      title = "TOP 5"
-      detail = size(self.board) == 0 ? "NO SCORES" : str(self.rank + 1) + " " + self.board[self.rank][0] + " " + str(self.board[self.rank][1])
+      title = size(self.board) == 0 ? "TOP 5" : str(self.rank+1)+" "+self.board[self.rank][0]
+      detail = size(self.board) == 0 ? "NO SCORES" : str(self.board[self.rank][1])
     elif self.mode == "results"
       if self.multiplayer
         title = self.scores[0] == self.scores[1] ? "DRAW" : (self.scores[0] > self.scores[1] ? "P1 WINS!" : "P2 WINS!")
-        if (now_ms() / 2000) % 2 == 1 title = "1:" + str(self.scores[0]) + " 2:" + str(self.scores[1]) end
+        var page = (now_ms()/2000)%3
+        if page == 1 title = "P1:"+str(self.scores[0]) end
+        if page == 2 title = "P2:"+str(self.scores[1]) end
       else
         title = "S:" + str(self.scores[0])
       end
       detail = self.menu_index == 0 ? "A:REMATCH" : "A:MENU"
+      if self.multiplayer && self.scores[0] != self.scores[1]
+        var winner = self.scores[0] > self.scores[1] ? 0 : 1
+        color = self.matrix ? 0x66FF88 : (winner == 0 ? store.get("dino_color",0x3399FF) : store.get("p2_color",0xFF3355))
+      end
+      for i : 0..2
+        pixel((now_ms()/180+i*17)%52,7,color)
+      end
     end
     self.small_text(title, 0, 1, color)
     self.small_text(detail, 0, 9, 0xAABBAA)
@@ -833,19 +1117,11 @@ class DinoRunner
 
   def small_text(value, x, y, color)
     # Custom compact 3x5 font keeps labels within 52 columns.
-    var font = {
-      "A":[2,5,7,5,5],"B":[6,5,6,5,6],"C":[3,4,4,4,3],"D":[6,5,5,5,6],
-      "E":[7,4,6,4,7],"F":[7,4,6,4,4],"G":[3,4,5,5,3],"H":[5,5,7,5,5],
-      "I":[7,2,2,2,7],"J":[1,1,1,5,2],"K":[5,5,6,5,5],"L":[4,4,4,4,7],
-      "M":[5,7,7,5,5],"N":[5,7,7,7,5],"O":[2,5,5,5,2],"P":[6,5,6,4,4],
-      "Q":[2,5,5,3,1],"R":[6,5,6,5,5],"S":[3,4,2,1,6],"T":[7,2,2,2,2],
-      "U":[5,5,5,5,7],"V":[5,5,5,5,2],"W":[5,5,7,7,5],"X":[5,5,2,5,5],
-      "Y":[5,5,2,2,2],"Z":[7,1,2,4,7],":":[0,2,0,2,0],"!":[2,2,2,0,2],
-      "<":[1,2,4,2,1],">":[4,2,1,2,4]," ":[0,0,0,0,0]}
+
     for i : 0..size(value)-1
       if x + i * 4 + 2 >= width() break end
       var c = value[i..i]
-      var rows = font.find(c)
+      var rows = self.font.find(c)
       if rows == nil
         var digit = int(c)
         if digit != nil && digit >= 0 && digit <= 9 rows = self.digits[digit] end
@@ -883,28 +1159,24 @@ class DinoRunner
   end
 
   def draw()
+    var draw_started = now_ms()
+    self.apply_palette()
     clear()
     rect_fill(0, 0, width(), height(), self.bg)
-    if self.matrix self.rain_draw() end
-    if self.mode != "run"
+    if self.mode != "run" && self.mode != "pause"
       self.draw_menu()
       return
     end
-    self.atmosphere()
-    if !self.matrix && self.stage % 2 == 0
-      circle_fill(43, 8, 1, 0xDD9955)
-    elif !self.matrix
-      # Five-pixel crescent; explicit silhouette stays clear over mist.
-      pixel(43, 6, 0xCCCCFF)
-      line(42, 7, 43, 7, 0xAAAAEE)
-      line(41, 8, 42, 8, 0xAAAAEE)
-      line(42, 9, 43, 9, 0xAAAAEE)
-      pixel(43, 10, 0xCCCCFF)
+    self.scenery()
+    line(0,14,width()-1,14,self.ground)
+    line(0,15,51,15,self.shade(5))
+    var near_offset = self.offset(0.24)
+    for i : 0..3
+      var nx = (i*13-near_offset%52+52)%52
+      pixel(nx,15,self.shade(3))
+      if self.world == 4 || self.world == 8 pixel(nx+1,15,self.shade(8)) end
     end
-    line(0, 14, width() - 1, 14, self.ground)
-    for i : 0 .. 3
-      pixel((round(i * 13 - self.travel) + 52) % 52, 15, self.ground)
-    end
+    self.draw_obstacles()
     var yy = 14 - round(self.y)
     if self.duck
       rect_fill(6, yy - 3, 7, 2, self.tint)
@@ -920,31 +1192,14 @@ class DinoRunner
       var foot = self.y > 0.0 ? 0 : round(self.travel / 2) % 2
       pixel(6 + foot * 2, yy - 1, self.tint)
     end
-    for o : self.obstacles
-      var ox = round(o[0])
-      if o[1] == 1
-        # Beak faces the runner; wings flap around a darker body.
-        pixel(ox, 9, (self.matrix ? 0x77FF99 : 0xFFBB44))
-        rect_fill(ox + 1, 9, 3, 1, (self.matrix ? 0x00CC44 : 0xCC8866))
-        pixel(ox + 1, 8, (self.matrix ? 0x55EE77 : 0xEEAA88))
-        var wing = (self.ticks / 6) % 2 == 0 ? 8 : 10
-        line(ox + 2, wing, ox + 4, wing, (self.matrix ? 0x55EE77 : 0xEEAA88))
-      elif o[1] == 2
-        # Rounded boulder with a light top and dark base.
-        line(ox + 1, 11, ox + 3, 11, (self.matrix ? 0x55DD77 : 0xAAA08C))
-        line(ox, 12, ox + 4, 12, (self.matrix ? 0x00BB44 : 0x887E6C))
-        line(ox, 13, ox + 4, 13, (self.matrix ? 0x009933 : 0x665E50))
-      else
-        # Saguaro silhouette: tall trunk, lifted arms, shaded stem.
-        var top = 14 - o[3]
-        line(ox + 2, top, ox + 2, 13, (self.matrix ? 0x33EE66 : 0x44DD77))
-        line(ox, top + 1, ox, top + 2, (self.matrix ? 0x00BB44 : 0x22AA55))
-        line(ox, top + 2, ox + 2, top + 2, (self.matrix ? 0x00BB44 : 0x22AA55))
-        line(ox + 4, top, ox + 4, top + 1, (self.matrix ? 0x66FF88 : 0x66EE88))
-        line(ox + 2, top + 1, ox + 4, top + 1, (self.matrix ? 0x66FF88 : 0x66EE88))
-      end
-    end
     self.hud()
+    if self.mode == "pause"
+      rect_fill(0,0,52,6,self.bg)
+      rect_fill(0,8,40,6,self.bg)
+      self.draw_menu()
+    end
+    # Degrade only ambient work if a draw consumes most of a 25ms frame.
+    if self.mode == "run" && now_ms()-draw_started > 20 self.fx_budget = max(0,self.fx_budget-10) end
   end
 end
 

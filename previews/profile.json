@@ -1,0 +1,76 @@
+{
+  "frames_per_world": 600,
+  "environment": "Vendored AWTRIX Berry VM, native raster boundary mocks; host timings are not TC002 timings.",
+  "worlds": [
+    {
+      "world": 1,
+      "name": "Grassland",
+      "peak_draw_instructions": 6568,
+      "mean_draw_us_host": 125.475,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 2,
+      "name": "Desert",
+      "peak_draw_instructions": 6675,
+      "mean_draw_us_host": 121.76,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 3,
+      "name": "Jungle",
+      "peak_draw_instructions": 7324,
+      "mean_draw_us_host": 124.36333333333333,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 4,
+      "name": "Neon City",
+      "peak_draw_instructions": 7709,
+      "mean_draw_us_host": 126.73333333333333,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 5,
+      "name": "Snow Ice",
+      "peak_draw_instructions": 7138,
+      "mean_draw_us_host": 128.15666666666667,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 6,
+      "name": "Volcano",
+      "peak_draw_instructions": 7661,
+      "mean_draw_us_host": 128.065,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 7,
+      "name": "Moon Base",
+      "peak_draw_instructions": 6977,
+      "mean_draw_us_host": 126.625,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 8,
+      "name": "Storm Night",
+      "peak_draw_instructions": 7219,
+      "mean_draw_us_host": 124.30333333333333,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 9,
+      "name": "Crystal",
+      "peak_draw_instructions": 8301,
+      "mean_draw_us_host": 132.04,
+      "vm_heap_bytes_after_gc": 101548
+    },
+    {
+      "world": 10,
+      "name": "Matrix",
+      "peak_draw_instructions": 15531,
+      "mean_draw_us_host": 171.94833333333332,
+      "vm_heap_bytes_after_gc": 101548
+    }
+  ]
+}
