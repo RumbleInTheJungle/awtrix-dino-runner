@@ -16,7 +16,7 @@ Rows show grassland/desert, jungle/neon city, ice/volcano, moon/storm and crysta
 
 The game stays out of automatic app rotation. Leaving it returns to your clock apps. It needs no game server or MQTT.
 
-For an existing installation, use the installer below to preserve an enabled old Matrix setting. When replacing the source by hand, first note that setting, then select **World mode: fixed → Fixed world: 10** after saving. Existing colour, rain-brightness and sound settings keep their values when you update the same script name.
+For an existing installation, use the installer below to preserve an enabled old Matrix setting. When replacing the source by hand, first note that setting, then select **World mode: fixed → Fixed world: 10** after saving. Existing colour and sound settings keep their values when you update the same script name.
 
 ```sh
 python3 tools/install.py http://YOUR-CLOCK-IP --name YOUR-EXISTING-SCRIPT-NAME
@@ -58,7 +58,7 @@ Open the game’s settings on the web UI’s **Apps** tab.
 |---|---|
 | Players | P1 / solo dino colour, default `#3399FF`; P2 colour, default `#FF3355` |
 | Worlds | Auto/fixed world, fixed world 1–10, scrolling scenery, parallax intensity, ambient effects and density |
-| Worlds | Grassland daylight tint, haze and intensity, Matrix rain brightness |
+| Worlds | Grassland daylight tint |
 | Sound | Game sounds and volume |
 | Scores | Reset high scores, applied once on the next launch |
 | Diagnostics | Debug logging, off by default |

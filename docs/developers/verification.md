@@ -32,20 +32,20 @@ A 1,000-frame Matrix test checks that retained VM memory does not grow by more t
 
 | World | Peak Berry instructions per draw |
 |---|---:|
-| Grassland | 5,242 |
-| Desert | 5,180 |
-| Jungle | 5,348 |
-| Neon City | 5,846 |
-| Snow / Ice | 5,222 |
-| Volcano | 5,488 |
-| Moon Base | 5,276 |
-| Storm Night | 5,309 |
-| Crystal Caverns | 5,592 |
-| Matrix | 7,427 |
+| Grassland | 5,236 |
+| Desert | 5,174 |
+| Jungle | 5,342 |
+| Neon City | 5,840 |
+| Snow / Ice | 5,216 |
+| Volcano | 5,482 |
+| Moon Base | 5,270 |
+| Storm Night | 5,303 |
+| Crystal Caverns | 5,586 |
+| Matrix | 7,418 |
 
-VM heap after garbage collection was 106,903 bytes in each profile. Host mean draw times were about 0.11–0.14 ms. These values include the test environment’s Berry objects but exclude firmware and graphics-driver memory. They are not TC002 timing or memory measurements.
+VM heap after garbage collection was 102,378 bytes in each profile. Host mean draw times were about 0.11–0.14 ms. These values include the test environment’s Berry objects but exclude firmware and graphics-driver memory. They are not TC002 timing or memory measurements.
 
-The machine-readable results are in [profile.json](../../previews/profile.json). Each world has a native 52×16 PNG and a 12× nearest-neighbour enlargement. The contact sheet arranges worlds in numeric order, two per row. Source/specification changes can change these measurements. The 2026-11-09 renderer optimisation was compared against the previous renderer over 7,080 frames covering all worlds, day/night, auto-mode transitions, haze, effect densities and budgets, Matrix brightness, parallax settings, HUD and menus; every frame was byte-identical.
+The machine-readable results are in [profile.json](../../previews/profile.json). Each world has a native 52×16 PNG and a 12× nearest-neighbour enlargement. The contact sheet arranges worlds in numeric order, two per row. Source/specification changes can change these measurements. The 2026-11-09 renderer optimisation was compared against the previous renderer over 7,080 frames covering all worlds, day/night, auto-mode transitions, haze, effect densities and budgets, Matrix brightness, parallax settings, HUD and menus; every frame was byte-identical. Removing the demo mode, the haze setting and the Matrix rain brightness setting (now fixed at its former 40% default) left those frames byte-identical again, with haze off.
 
 ## Hardware checks still required
 

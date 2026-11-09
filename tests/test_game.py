@@ -31,7 +31,7 @@ class GameTests(unittest.TestCase):
     def test_physics_matches_original(self):
         trace = '''
 import json
-game.seed=12345 game.start(false) game.obstacles=[]
+game.seed=12345 game.start() game.obstacles=[]
 for i:0..2399
   if i%60==0 game.launch() end
   game.jump_held=i%60<22
@@ -52,7 +52,7 @@ end
     def test_obstacle_generation_and_collision_match(self):
         trace = '''
 import json
-game.seed=222 game.start(false)
+game.seed=222 game.start()
 print(json.dump(game.obstacles))
 for i:0..799
   if game.mode=="run"
@@ -90,7 +90,7 @@ if saved["world_schema"]!=1 || saved["score_schema"]!=1 raise "test", "migration
     def test_animation_and_obstacle_skin_separation(self):
         run(SCRIPT, '''
 import json
-game.new_match(false) game.seed=123 game.start(false)
+game.new_match(false) game.seed=123 game.start()
 var before=json.dump(game.obstacles) var seed=game.seed
 for w:0..9
  game.world_auto=false game.fixed_world=w game.stage=0 game.distance=0.0 game.palette()
@@ -125,7 +125,7 @@ game.multiplayer=true game.separate=true game.new_match(false)
 press(1)
 for i:0..119 tick(25) end
 var course=nil
-game.seed=game.match_seed game.start(false) course=json.dump(game.obstacles)
+game.seed=game.match_seed game.start() course=json.dump(game.obstacles)
 # P1 crashes on an obstacle at the dino.
 game.obstacles[0][0]=8.0 game.physics()
 if game.mode!="ready" || game.logical!=1 raise "test","P2 handover" end
@@ -142,7 +142,7 @@ if game.mode!="run" raise "test","countdown completes" end
 if game.score!=0 || game.distance>1.0 || game.logical!=1 raise "test","fresh P2 run" end
 for i:0..3 tick(25) end
 if game.mode!="run" raise "test","P2 survives start" end
-game.seed=game.match_seed game.start(false)
+game.seed=game.match_seed game.start()
 if json.dump(game.obstacles)!=course raise "test","same course" end
 ''')
 
@@ -255,9 +255,11 @@ if heap_bytes()>before+4096 raise "test","renderer memory growth" end
 
     def test_metadata_and_removed_settings(self):
         self.assertIn('# @ondemand\n', SCRIPT)
-        for key in ['start_speed','difficulty','switch_score','type_randomness','distance_randomness','matrix']:
+        for key in ['start_speed','difficulty','switch_score','type_randomness','distance_randomness','matrix',
+                    'haze','haze_intensity','matrix_brightness']:
             self.assertNotIn('# @config '+key+' ',SCRIPT)
-        self.assertNotIn('self.start(true)',SCRIPT)
+        for leftover in ['demo','autoplay','mist(']:
+            self.assertNotIn(leftover,SCRIPT)
 
 class InstallerTests(unittest.TestCase):
     def test_matrix_upgrade_and_backup(self):

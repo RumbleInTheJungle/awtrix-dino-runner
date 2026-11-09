@@ -1,6 +1,6 @@
 # @name Dino Runner
 # @desc Turn-based dinosaur runner with ten pixel worlds
-# @version 0.1.0
+# @version 0.2.0
 # @display 52x16
 # @ondemand
 # @config world_mode select "World mode" options=auto,fixed default=auto group="Worlds"
@@ -14,9 +14,6 @@
 # @config dino_color color "P1 / solo dino color" default=#3399FF group="Players"
 # @config reset_best bool "Reset high scores (one shot)" default=false group="Scores"
 # @config daylight color "Daylight color" default=#181E14 group="Worlds"
-# @config haze bool "Moving haze" default=false group="Worlds"
-# @config haze_intensity slider "Haze intensity (0–100%)" default=25 min=0 max=100 unit=% group="Worlds"
-# @config matrix_brightness slider "Matrix rain brightness (0–100%)" default=40 min=0 max=100 unit=% group="Worlds"
 # @config sounds bool "Game sounds" default=true group="Sound"
 # @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=% group="Sound"
 # Native AWTRIX NG TC002 on-demand game, 52x16. No server or MQTT required.
@@ -27,14 +24,14 @@ import gamepad
 import math
 
 class DinoRunner
-  var mode, best, score, label, before, up_before, local_duck
+  var mode, best, score, label, local_duck
   var y, vy, duck, obstacles, seed, ticks, last, accumulator, active
   var digits, travel, jump_until
   var tint, switch_score, difficulty, initial_speed, speed, distance, stage
-  var demo, idle_since, bg, fg, gold, ground
-  var type_randomness, distance_randomness, day_color, haze, haze_intensity
-  var jump_held, local_jump, jump_age, jump_cut, stars, jump_gravity
-  var matrix, matrix_brightness, drops, rain_seed
+  var bg, fg, gold, ground
+  var type_randomness, distance_randomness, day_color
+  var jump_held, local_jump, jump_age, jump_cut, jump_gravity
+  var matrix, drops, rain_seed
   var player, pad_label
   var audio, tunes, record_target, record_announced, match_record
 
@@ -113,7 +110,6 @@ class DinoRunner
       store.set("world_schema", 1)
     end
     self.matrix = false
-    self.matrix_brightness = int(clamp(num(store.get("matrix_brightness"),40),0,100))
     self.build_rain_ramps()
     # Settings and button masks are fixed for the session; read them once, not per frame.
     self.player_colors = [store.get("dino_color", 0x3399FF), store.get("p2_color", 0xFF3355)]
@@ -131,14 +127,11 @@ class DinoRunner
     self.type_randomness = 100
     self.distance_randomness = 100
     self.day_color = store.get("daylight")
-    self.haze = store.get("haze")
-    self.haze_intensity = clamp(num(store.get("haze_intensity"), 25), 0, 100)
     self.local_jump = false
     self.jump_held = false
     self.jump_age = 0
     self.jump_cut = false
     self.jump_gravity = 24.0
-    self.stars = [[22,1,7],[29,6,13],[35,2,19],[48,7,31],[18,7,43],[39,6,59]]
     self.tint = self.player_colors[self.logical]
     self.switch_score = 500
     self.difficulty = 5
@@ -146,8 +139,6 @@ class DinoRunner
     self.speed = self.initial_speed * 1.0
     self.distance = 0.0
     self.stage = 0
-    self.demo = false
-    self.idle_since = now_ms()
     self.palette()
     if store.get("score_schema", 0) != 1
       store.set("leaderboard", [])
@@ -172,8 +163,6 @@ class DinoRunner
     self.best = size(self.board) > 0 ? self.board[0][1] : 0
     self.score = 0
     self.label = "0"
-    self.before = 0
-    self.up_before = false
     self.local_duck = false
     self.duck = false
     self.y = 0.0
@@ -232,13 +221,12 @@ class DinoRunner
     return self.seed % n
   end
 
-  def start(demo)
+  def start()
     self.mode = "run"
-    self.demo = demo
     self.scene_ms = 0
     self.record_target = self.best
     self.record_announced = false
-    if !demo rotation.pause() end
+    rotation.pause()
     self.distance = 0.0
     self.stage = 0
     self.speed = self.initial_speed * 1.0
@@ -258,16 +246,13 @@ class DinoRunner
   end
 
   def jump()
-    if self.demo || self.mode == "ready" || self.mode == "dead"
-      self.start(false)
-    elif self.mode == "run"
-      # A slightly early second press waits for landing instead of being lost.
-      self.jump_until = now_ms() + 300
-      if self.y <= 0.0
-        self.duck = false
-        self.launch()
-        self.jump_until = 0
-      end
+    if self.mode != "run" return end
+    # A slightly early second press waits for landing instead of being lost.
+    self.jump_until = now_ms() + 300
+    if self.y <= 0.0
+      self.duck = false
+      self.launch()
+      self.jump_until = 0
     end
   end
 
@@ -280,7 +265,6 @@ class DinoRunner
   # Logical players never depend on the firmware's mutable input slot numbers.
   def menu()
     self.mode = "menu"
-    self.demo = false
     self.local_jump = false
     self.local_duck = false
     self.gated = true
@@ -590,7 +574,7 @@ class DinoRunner
     if self.mode == "countdown"
       if ms - self.countdown_at >= 3000
         self.seed = self.match_seed
-        self.start(false)
+        self.start()
         self.gated = true
       end
       return
@@ -620,7 +604,7 @@ class DinoRunner
       self.score = points
       self.label = str(self.score)
     end
-    if !self.demo && !self.record_announced && self.score > self.record_target
+    if !self.record_announced && self.score > self.record_target
       self.record_announced = true
       self.play_event("record")
     end
@@ -633,9 +617,6 @@ class DinoRunner
       self.palette()
       self.play_event("switch")
     end
-    if self.demo
-      self.autoplay(speed)
-    end
     self.travel += speed * 0.025
     if self.travel >= 52.0 self.travel -= 52.0 end
     if self.y <= 0.0 && self.jump_until > now_ms()
@@ -645,7 +626,7 @@ class DinoRunner
     end
     if self.y > 0.0 || self.vy > 0.0
       self.jump_age += 25
-      if !self.demo && !self.jump_cut
+      if !self.jump_cut
         if !self.jump_held
           # Release before 400ms keeps the initial small jump.
           self.jump_cut = true
@@ -698,7 +679,7 @@ class DinoRunner
   end
 
   def play_event(name)
-    if !self.audio || self.demo return end
+    if !self.audio return end
     try
       sound.effect(self.tunes[name])
     except .. as err, msg
@@ -711,9 +692,9 @@ class DinoRunner
   def launch()
     var factor = self.speed / 20.0
     self.jump_gravity = 24.0 * factor * factor
-    self.vy = math.sqrt(2.0 * self.jump_gravity * (self.demo ? 17.0 : 8.0))
+    self.vy = math.sqrt(2.0 * self.jump_gravity * 8.0)
     self.jump_age = 0
-    self.jump_cut = self.demo
+    self.jump_cut = false
     self.duck = false
   end
 
@@ -775,8 +756,8 @@ class DinoRunner
 
   def build_rain_ramps()
     # Precomputed tail colours for each drop length (10..15), indexed by length.
-    # Direct brightness scaling: no minimum, no gamma lift, no forced lit tail.
-    var peak = 144.0 * self.matrix_brightness / 100.0
+    # Fixed at 40% of the 144 green peak, the former brightness default.
+    var peak = 144.0 * 40 / 100.0
     self.rain_ramps = []
     for length : 0 .. 15
       var ramp = nil
@@ -795,7 +776,6 @@ class DinoRunner
   end
 
   def rain_draw()
-    if self.matrix_brightness <= 0 return end
     var stride = max(1, 101 / max(1, min(self.density, self.fx_budget)))
     var columns = width()
     # Rows 14-15 are always covered by the ground drawn afterwards.
@@ -811,29 +791,6 @@ class DinoRunner
         if c != 0 pixel(x, head - tail, c) end
       end
       x += stride
-    end
-  end
-
-  def mist()
-    if !self.haze || self.haze_intensity <= 0 return end
-    var t = self.scene_ms / 1000.0
-    var r = (self.bg >> 16) & 255
-    var g = (self.bg >> 8) & 255
-    var b = self.bg & 255
-    # Slow, broad mist wisps drift horizontally, with strongest haze near ground.
-    # Low resolution blocks are intentional on a 52x16 matrix; no rainbow plasma.
-    for x : 0 .. 25
-      var band = 0.5 + 0.5 * math.sin(x * 0.23 - t * 0.35)
-      var drift = math.sin(x * 0.13 - t * 0.21) * 1.4
-      for row : 0 .. 3
-        var y = 6 + row * 2
-        var ribbon = max(0.0, 1.0 - math.abs(y - (10.0 + drift)) / 5.0)
-        var alpha = band * ribbon * self.haze_intensity / 160.0
-        var hr = int(r + (100 - r) * alpha)
-        var hg = int(g + (112 - g) * alpha)
-        var hb = int(b + (120 - b) * alpha)
-        rect_fill(x * 2, y, 2, 2, rgb(hr, hg, hb))
-      end
     end
   end
 
@@ -1032,7 +989,6 @@ class DinoRunner
         pixel((i*13-n%52+52)%52,13,near)
       end
     end
-    if self.haze && !self.matrix self.mist() end
     if self.ambient self.world_fx() end
   end
 
@@ -1116,18 +1072,6 @@ class DinoRunner
         elif self.world == 9
           line(x+4,top,x+4,13,light)
         end
-      end
-    end
-  end
-
-  def autoplay(speed)
-    self.duck = false
-    for o : self.obstacles
-      var gap = o[0] - 11.0
-      if o[1] != 1 && gap > -5 && gap < speed * 0.65 && self.y <= 0.0
-        self.launch()
-      elif o[1] == 1 && o[0] < 26 && o[0] + 5 > 5 && self.y <= 0.0
-        self.duck = true
       end
     end
   end
@@ -1233,13 +1177,9 @@ class DinoRunner
     line(0, 0, 0, 4, self.gold)
     line(2, 0, 2, 4, self.gold)
     line(0, 2, 2, 2, self.gold)
-    self.tiny_number(self.demo ? self.best : max(self.best, self.score), 4, self.gold)
-    if self.demo
-      text(27, 6, "DEMO", self.gold)
-    else
-      var shown = min(9999, self.score)
-      self.tiny_number(shown, width() - size(str(shown)) * 4, self.fg)
-    end
+    self.tiny_number(max(self.best, self.score), 4, self.gold)
+    var shown = min(9999, self.score)
+    self.tiny_number(shown, width() - size(str(shown)) * 4, self.fg)
   end
 
   def draw()

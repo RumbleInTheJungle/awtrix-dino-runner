@@ -21,7 +21,7 @@ def press(slot,key)
 end
 check(game.initial_speed==30 && game.difficulty==5 && game.switch_score==500,"fixed rules")
 check(game.type_randomness==100 && game.distance_randomness==100,"fixed randomness")
-check(game.mode=="menu" && !game.demo,"on-demand menu")
+check(game.mode=="menu","on-demand menu")
 game.setup() game.on_show() tick(100000)
 check(game.mode=="menu","no idle demo")
 game.menu_index=0
@@ -45,12 +45,12 @@ game.action("a",0)
 check(game.mode=="run","explicit resume")
 # Course reset and independent visual RNG.
 game.multiplayer=true game.separate=false game.new_match(false)
-game.seed=game.match_seed game.start(false)
+game.seed=game.match_seed game.start()
 var course=json.dump(game.obstacles)
 for i:0..50 game.rain_random(10) end
 game.score=321 game.finish_run()
 check(game.mode=="ready" && game.logical==1,"second player handover")
-game.seed=game.match_seed game.start(false)
+game.seed=game.match_seed game.start()
 check(json.dump(game.obstacles)==course && game.speed==30,"same course and speed")
 game.turn=1 game.draw()
 check(game.tint==0xFF3355,"P2 default colour")
