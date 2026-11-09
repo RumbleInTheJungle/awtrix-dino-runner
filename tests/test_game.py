@@ -197,6 +197,25 @@ if finish_match(true,200,300) raise "test","no multiplayer fanfare below #1" end
 if !finish_match(true,100,700) raise "test","fanfare when second player takes #1" end
 ''')
 
+    def test_led_floor_keeps_layers_visible_and_ordered(self):
+        run(SCRIPT, '''
+def peak(c) return max((c>>16)&255, max((c>>8)&255, c&255)) end
+for w:0..9
+  for stage:0..1
+    game.world_auto=false game.fixed_world=w game.stage=stage game.distance=0.0 game.palette()
+    var c=game.colors
+    if w!=9
+      if peak(c[1])<56 || peak(c[2])<72 || peak(c[3])<92 || peak(c[5])<56 raise "test","floor "+str(w) end
+    end
+    if peak(c[1])>peak(c[2]) || peak(c[2])>peak(c[3]) raise "test","layer order "+str(w) end
+    if peak(c[3])>=peak(c[6]) raise "test","decoration brighter than hazards "+str(w) end
+  end
+end
+# Matrix keeps its original dark backdrop below the rain.
+game.fixed_world=9 game.stage=0 game.palette()
+if game.colors[1]!=0x001307 raise "test","matrix exempt" end
+''')
+
     def test_audio_failure_warns_once(self):
         run(SCRIPT, '''
 game.audio=true

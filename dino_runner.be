@@ -42,7 +42,7 @@ class DinoRunner
   var worlds, world, next_world, old_colors, colors, transition_at, hills
   var parallax, parallax_intensity, ambient, density, fixed_world, world_auto
   var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
-  var shades, shade_phase, rain_ramps, player_colors
+  var shades, shade_phase, rain_ramps, player_colors, layer_floor
   var bit_a, bit_b, bit_start, bit_select
 
   def init()
@@ -811,6 +811,9 @@ class DinoRunner
       [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4,0x557AB4,0x557AB4,0x557AB4],
       [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55,0x33AA55,0x33AA55,0x33AA55]
     ]
+    # Minimum peak channel per palette index (far 56, mid 72, near 92, soil 56):
+    # about 4, 6 and 9 LED levels at 25% panel brightness.
+    self.layer_floor = [0, 56, 72, 92, 0, 56]
     self.hills = [0,0,1,1,2,3,3,4,4,3,2,2,1,0,0,1,2,3,3,2,1,1,0,0,1,0]
     self.world = 0
     self.next_world = 0
@@ -837,6 +840,16 @@ class DinoRunner
     return rgb(r,g,blue)
   end
 
+  def lift(c, floor)
+    var r = (c >> 16) & 255
+    var g = (c >> 8) & 255
+    var b = c & 255
+    var peak = max(r, max(g, b))
+    if peak == 0 || peak >= floor return c end
+    var f = floor / (peak * 1.0)
+    return rgb(int(r * f + 0.5), int(g * f + 0.5), int(b * f + 0.5))
+  end
+
   def palette()
     var desired = self.world_auto ? (self.stage / 2) % 10 : self.fixed_world
     var target = self.worlds[desired]
@@ -847,6 +860,16 @@ class DinoRunner
       next.push(night ? self.blend(0x000008,c,0.60) : c)
     end
     if desired == 0 && self.stage % 2 == 0 next[0] = self.blend(next[0],self.day_color,0.35) end
+    # LED floor: the firmware applies gamma 1.9 before scaling by panel brightness, so
+    # very dark channels round to zero at reduced brightness. Lift far, mid, near and
+    # soil to a minimum peak channel, keeping their hue and the far < mid < near order.
+    # Matrix is exempt: its black backdrop keeps the code rain readable.
+    if desired != 9
+      for i : 1 .. 5
+        var floor = self.layer_floor[i]
+        if floor > 0 next[i] = self.lift(next[i], floor) end
+      end
+    end
     if self.distance == 0.0
       self.old_colors = next
       self.colors = next
