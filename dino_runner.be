@@ -798,18 +798,26 @@ class DinoRunner
     # bg, far, mid, near, ground, soil, hazard light, hazard shade, sky accent,
     # then three signature colours (sig1, sig2, sig3) used by world-specific details.
     self.worlds = [
-      [0x06121A,0x0B2530,0x123921,0x285532,0x78A84B,0x322416,0x88C86A,0x547B45,0xB5993A,0xB5993A,0xB5993A,0xB5993A],
-      [0x1C0D03,0x3C180A,0x512B0E,0x64431C,0xBE9644,0x4B3014,0x67C46D,0xAD8655,0xD6AA42,0xD6AA42,0xD6AA42,0xD6AA42],
-      [0x020C09,0x082017,0x15382C,0x305D38,0x6E9266,0x202E27,0xB5BBA0,0x6A8665,0x438A58,0x438A58,0x438A58,0x438A58],
+      # Grassland: sig1 clouds/stars, sig2 yellow flowers, sig3 pink flowers.
+      [0x07182E,0x0B2530,0x123921,0x285532,0x78A84B,0x322416,0x88C86A,0x547B45,0xB5993A,0x6A7A8C,0xC8A83A,0xB8568C],
+      # Desert: sig1 distant cacti, sig2 cactus arm green, sig3 bone fragments.
+      [0x1C0D03,0x3C180A,0x512B0E,0x64431C,0xBE9644,0x4B3014,0x67C46D,0xAD8655,0xD6AA42,0x2C5A2A,0x3E9A4A,0xA89880],
+      # Jungle: sig1 vines, sig2 leaves, sig3 moss.
+      [0x020C09,0x082017,0x15382C,0x305D38,0x6E9266,0x202E27,0xB5BBA0,0x6A8665,0x438A58,0x2E7A3A,0x5AB04A,0x8ED65E],
       # Neon: sig1 cyan windows, sig2 magenta windows, sig3 neon sign strips.
       [0x020310,0x13173C,0x22203B,0x473049,0x25A7BC,0x101C35,0xF5C842,0xD8459E,0x9C7E22,0x1E8FB0,0x9A2C8C,0xB8309C],
-      [0x030B1C,0x182C48,0x28495B,0x406C79,0xB9DDDF,0x183C55,0x8BE6ED,0x5FADCF,0x8AA9BE,0x8AA9BE,0x8AA9BE,0x8AA9BE],
+      # Snow: sig1 snow, sig2 fir green, sig3 stars and glints.
+      [0x030B1C,0x182C48,0x28495B,0x406C79,0xB9DDDF,0x183C55,0x8BE6ED,0x5FADCF,0x8AA9BE,0x9AB4CC,0x2A5A4E,0xC8D8F0],
       # Volcano: sig1 bright lava, sig2 dim lava streams, sig3 basalt.
       [0x100303,0x24090A,0x3D1410,0x5B2113,0xC45327,0x5A0F06,0xFFB347,0xC2452A,0xC46E28,0xFF7A1A,0x6A1806,0x5A281E],
-      [0x01020A,0x151526,0x303043,0x48475A,0x9DA2B4,0x25293A,0xBDCAD7,0x7496AE,0x287F8B,0x287F8B,0x287F8B,0x287F8B],
-      [0x040611,0x10152A,0x192A34,0x344243,0x607C71,0x22252F,0xA4B8C4,0x6C927C,0x607894,0x607894,0x607894,0x607894],
-      [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4,0x557AB4,0x557AB4,0x557AB4],
-      [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55,0x33AA55,0x33AA55,0x33AA55]
+      # Moon: sig1 stars, sig2 planet land, sig3 station lights.
+      [0x01020A,0x151526,0x303043,0x48475A,0x9DA2B4,0x25293A,0xBDCAD7,0x7496AE,0x287F8B,0x8A90B0,0x3AA05A,0x3AC8E0],
+      # Storm: sig1 lightning, sig2 storm clouds, sig3 cloud edges.
+      [0x040611,0x10152A,0x192A34,0x344243,0x607C71,0x22252F,0xA4B8C4,0x6C927C,0x607894,0xD8DCFF,0x26264E,0x46467E],
+      # Crystal: sig1 cyan, sig2 magenta, sig3 violet decorative crystals (dimmer than hazards).
+      [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4,0x1A7890,0x7A2A94,0x4A3AA0],
+      # Matrix: sig1 terminal outlines, sig2 packet markings, sig3 cursor.
+      [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55,0x00843A,0x1E8A44,0x55DD77]
     ]
     # Minimum peak channel per palette index (far 56, mid 72, near 92, soil 56):
     # about 4, 6 and 9 LED levels at 25% panel brightness.
@@ -940,10 +948,25 @@ class DinoRunner
       var j = self.hills[b%26]
       if kind == 0
         line(x,12-h,x,13,far)
+        # Snow caps on the higher far mountains.
+        if w == 4 && h >= 3 pixel(x,12-h,sig1) end
         line(x,13-j/2,x,13,mid)
+        # Storm clouds drift across the top of the sky.
+        if w == 7
+          var c = a%23
+          if c < 15 pixel(x,5,sig2) end
+          if c >= 3 && c < 11 pixel(x,6,c == 3 || c == 10 ? sig3 : sig2) end
+        end
       elif kind == 1
         line(x,6+h/2,x,9+h/2,far)
         if b%13 < 2 line(x,7,x,13,mid) end
+        # Hanging vines with a leaf at the end, in front of the canopy.
+        var v = b%11
+        if v == 4 || v == 8
+          var len = 2+(b/11+v)%3
+          line(x,5,x,4+len,sig1)
+          pixel(x,5+len,sig2)
+        end
       elif kind == 2
         var top = 7+(a/7)%4
         line(x,top,x,13,far)
@@ -983,6 +1006,11 @@ class DinoRunner
           if a%29 == 15 line(x,7+h,x,13,sig2)
           elif a%13 == 6 && h >= 2 pixel(x,6+h,accent)
           end
+        elif w == 8
+          # Crystal tips on the cave ceiling.
+          if a%11 == 5 && h >= 1 pixel(x,6+h,sig1)
+          elif a%17 == 9 && h >= 1 pixel(x,6+h,sig2)
+          end
         end
         if b%21 < 4 line(x,6,x,8+j/2,mid) end
         if a%29 < 2 line(x,10,x,13,far) end
@@ -995,8 +1023,12 @@ class DinoRunner
         line(x,9,x+3,9,mid)
         pixel(x+1,8,mid)
       elif w == 1
-        line(x,10,x,13,mid)
-        line(x-1,11,x+1,11,mid)
+        # Distant saguaro silhouette.
+        line(x,9,x,13,sig1)
+        line(x-2,10,x-2,11,sig1)
+        pixel(x-1,11,sig1)
+        line(x+2,9,x+2,10,sig1)
+        pixel(x+1,10,sig1)
       elif w == 2
         rect_fill(x,10,3,4,mid)
         line(x-1,10,x+3,10,near)
@@ -1006,9 +1038,14 @@ class DinoRunner
         line(x,8,x,13,near)
         pixel(x+1,8,accent)
       elif w == 4
-        line(x,10,x,13,mid)
-        line(x-1,11,x+1,11,near)
-        pixel(x,10,accent)
+        # Fir tree with snow on its tip and branches.
+        pixel(x,8,sig1)
+        line(x-1,9,x+1,9,sig2)
+        line(x-1,10,x+1,10,sig2)
+        pixel(x+1,10,sig1)
+        line(x-2,11,x+2,11,sig2)
+        pixel(x-2,11,sig1)
+        line(x,12,x,13,mid)
       elif w == 5
         line(x,7,x,9,near)
         pixel(x,8,accent)
@@ -1016,16 +1053,34 @@ class DinoRunner
         line(x,11,x+4,11,mid)
         rect_fill(x-1,12,7,2,mid)
         line(x+2,9,x+2,10,near)
+        # Station windows and a slowly blinking antenna light.
+        pixel(x+1,12,sig3)
+        pixel(x+4,12,sig3)
+        if (self.scene_ms/700)%3 == 0 pixel(x+2,8,sig3) end
       elif w == 7
-        line(x,10,x,13,mid)
-        line(x-1,11,x+1,12,mid)
+        # Bare tree.
+        line(x,9,x,13,mid)
+        pixel(x-1,9,mid)
+        pixel(x-2,8,mid)
+        pixel(x+1,10,mid)
+        pixel(x+2,9,mid)
       elif w == 8
-        line(x,9,x,12,near)
-        pixel(x-1,11,mid)
-        pixel(x+1,11,mid)
-      else
+        # Crystal cluster: tall cyan, small magenta and violet shards.
+        line(x,10,x,13,sig1)
+        pixel(x,9,sig3)
+        line(x-2,12,x-2,13,sig2)
+        line(x+2,11,x+2,13,sig3)
+      elif i%2 == 0
         rect_fill(x,10,5,3,mid)
         line(x,10,x+4,10,near)
+      else
+        # Terminal outline on a short stand, with a blinking cursor.
+        line(x,8,x+4,8,sig1)
+        line(x,11,x+4,11,sig1)
+        line(x,9,x,10,sig1)
+        line(x+4,9,x+4,10,sig1)
+        if (self.scene_ms/500)%2 == 0 pixel(x+2,9,sig3) end
+        line(x+2,12,x+2,13,sig1)
       end
     end
     # Sky accents stay below the HUD and above the normal runner silhouette.
@@ -1039,15 +1094,40 @@ class DinoRunner
         pixel(sky_x,8,accent)
       end
       var cloud = (25-f%104+104)%104
-      line(cloud,6,cloud+3,6,far)
+      if w == 0 && self.stage%2 == 0
+        # Two small white clouds on the day sky.
+        line(cloud,6,cloud+3,6,sig1)
+        line(cloud+1,5,cloud+2,5,sig1)
+        var cloud2 = (70-f%104+104)%104
+        line(cloud2,7,cloud2+2,7,sig1)
+        pixel(cloud2+1,6,sig1)
+      else
+        line(cloud,6,cloud+3,6,far)
+      end
     elif w == 6
+      # Small blue-green planet.
       circle_fill(sky_x,7,1,accent)
+      pixel(sky_x-1,7,sig2)
+      pixel(sky_x,6,sig2)
+    end
+    # Sparse fixed stars: moon base, snow, and grassland at night.
+    if w == 6 || w == 4 || (w == 0 && self.stage%2 == 1)
+      var star = w == 4 ? sig3 : sig1
+      for k : 0..3
+        pixel((k*29+11-f%104+104)%104,5+(k*2)%3,star)
+      end
     end
     # Near-ground tufts. Their row-15 counterparts are drawn by draw() after the
     # ground line, which would cover anything drawn on row 15 here.
     if w == 0 || w == 2 || w == 7
       for i : 0..3
         pixel((i*13-n%52+52)%52,13,near)
+      end
+    end
+    if w == 0
+      # Flowers between the tufts, alternating yellow and pink.
+      for i : 0..3
+        pixel((i*13+6-n%52+52)%52,13,i%2 == 0 ? sig2 : sig3)
       end
     end
     if self.ambient self.world_fx() end
@@ -1099,10 +1179,14 @@ class DinoRunner
         if dy <= 13 pixel(dx,dy,self.shade(9)) end
       end
     end
-    if w == 7 && t%120 < 2
-      pixel(40,6,color)
-      pixel(39,7,color)
-      pixel(40,8,color)
+    if w == 7 && t%90 < 2
+      # A small distant lightning bolt; never a full-display flash.
+      var lx = 30+((t/90)%3)*7
+      var bolt = self.shade(9)
+      pixel(lx,6,bolt)
+      pixel(lx-1,7,bolt)
+      pixel(lx,8,bolt)
+      pixel(lx-1,9,bolt)
     end
   end
 
@@ -1124,9 +1208,11 @@ class DinoRunner
         line(x,13,x+4,13,self.blend(0,dark,0.75))
       elif self.world == 0 || self.world == 1
         var top = 14-o[3]
+        # Desert cacti are green throughout; grassland keeps its bush colours.
+        var arm = self.world == 1 ? self.shade(10) : dark
         line(x+2,top,x+2,13,light)
-        line(x,top+1,x,top+2,dark)
-        line(x,top+2,x+2,top+2,dark)
+        line(x,top+1,x,top+2,arm)
+        line(x,top+2,x+2,top+2,arm)
         line(x+4,top,x+4,top+1,light)
         line(x+2,top+1,x+4,top+1,light)
       elif self.world == 3
@@ -1158,8 +1244,18 @@ class DinoRunner
         line(x,top,x,13,light)
         if self.world == 4 || self.world == 8
           line(x+2,top,x+2,13,light)
+          if self.world == 4 pixel(x+3,top+1,self.shade(11)) end
+        elif self.world == 6
+          # Supply crate band.
+          line(x+1,top+2,x+3,top+2,light)
+        elif self.world == 7
+          # Broken stump with a ring.
+          pixel(x+2,top+1,light)
         elif self.world == 2
           line(x+1,12,x+3,12,self.shade(3))
+          # Moss on top of the stone, dripping down one side.
+          line(x+1,top,x+4,top,self.shade(11))
+          pixel(x+4,top+1,self.shade(11))
         elif self.world == 9
           line(x+4,top,x+4,13,light)
         end
@@ -1297,6 +1393,10 @@ class DinoRunner
         pixel(nx+1,15,self.shade(9))
         pixel((nx+7)%52,15,self.shade(9))
       end
+      # Moon base floor lights, crystal reflections and Matrix packet markings.
+      if self.world == 6 pixel(nx+1,15,self.shade(11)) end
+      if self.world == 8 pixel((nx+6)%52,15,self.shade(10)) end
+      if self.world == 9 pixel((nx+5)%52,15,self.shade(10)) end
     end
     self.draw_obstacles()
     var yy = 14 - round(self.y)
