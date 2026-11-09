@@ -113,6 +113,63 @@ pad_dirs=[[1,0],nil] game.step()
 if game.menu_index!=2 raise "test","second edge lost" end
 ''')
 
+    def test_pad_loss_during_countdown_restarts_countdown(self):
+        run(SCRIPT, '''
+import json
+def tick(ms) clock_ms+=ms game.step() end
+def release() pad_masks=[0,0] tick(25) end
+def press(slot) release() pad_masks[slot-1]=1 tick(25) release() end
+game.setup() game.on_show()
+pad_names=["PAD-A","PAD-B"] release()
+game.multiplayer=true game.separate=true game.new_match(false)
+press(1)
+for i:0..119 tick(25) end
+var course=nil
+game.seed=game.match_seed game.start(false) course=json.dump(game.obstacles)
+# P1 crashes on an obstacle at the dino.
+game.obstacles[0][0]=8.0 game.physics()
+if game.mode!="ready" || game.logical!=1 raise "test","P2 handover" end
+press(2)
+if game.mode!="countdown" raise "test","P2 countdown" end
+pad_names=["PAD-A",""] tick(25)
+if game.mode!="pause" || !game.recover raise "test","countdown pad loss pauses" end
+game.draw()
+pad_names=["PAD-A","PAD-B"] release()
+press(2)
+if game.mode!="countdown" || game.recover raise "test","confirmation restarts countdown" end
+for i:0..118 tick(25) end
+if game.mode!="run" raise "test","countdown completes" end
+if game.score!=0 || game.distance>1.0 || game.logical!=1 raise "test","fresh P2 run" end
+for i:0..3 tick(25) end
+if game.mode!="run" raise "test","P2 survives start" end
+game.seed=game.match_seed game.start(false)
+if json.dump(game.obstacles)!=course raise "test","same course" end
+''')
+
+    def test_hiding_pauses_run_and_restarts_countdown(self):
+        run(SCRIPT, '''
+def tick(ms) clock_ms+=ms game.step() end
+game.setup() game.on_show()
+game.multiplayer=false game.new_match(false) game.action("a",0)
+if game.mode!="countdown" raise "test","countdown" end
+tick(2500)
+game.on_hide() clock_ms+=10000 game.on_show()
+for i:0..80 tick(25) end
+if game.mode!="countdown" raise "test","hidden countdown restarts" end
+for i:0..40 tick(25) end
+if game.mode!="run" raise "test","countdown completes" end
+game.obstacles=[] for i:0..9 tick(25) end
+var dist=game.distance
+game.on_button_event("select","press")
+game.on_hide() clock_ms+=10000 game.on_show()
+for i:0..9 tick(25) end
+if game.mode!="pause" || game.distance!=dist raise "test","hidden run pauses" end
+if game.local_pressed raise "test","held clock button cleared" end
+if game.gated raise "test","input unblocked after return" end
+game.action("a",0)
+if game.mode!="run" raise "test","resume after return" end
+''')
+
     def test_audio_failure_warns_once(self):
         run(SCRIPT, '''
 game.audio=true
@@ -143,11 +200,24 @@ game.mode="run" game.obstacles=[] game.world_auto=false game.fixed_world=9 game.
 var fake_time=0
 now_ms=def() fake_time+=25 return fake_time end
 game.draw()
-if game.fx_budget!=90 raise "test","slow draw fallback" end
-game.mode="pause" game.draw()
+if game.fx_budget!=100 raise "test","single slow draw ignored" end
+game.draw() game.draw()
+if game.fx_budget!=90 raise "test","sustained slow draws reduce effects" end
+game.mode="pause" for i:0..9 game.draw() end
 if game.fx_budget!=90 raise "test","paused fallback changed frame" end
 now_ms=def() return clock_ms end
-game.mode="run" game.fx_budget=100
+game.mode="run"
+# Occasional spikes (one slow draw in ten) never reduce effects.
+game.fx_budget=100 game.fx_strain=0 game.fx_calm=0
+for i:0..99 game.adapt_effects(i%10==0) end
+if game.fx_budget!=100 raise "test","isolated spikes ignored" end
+# A long fast streak restores a step, capped at full effects.
+game.fx_budget=80 game.fx_strain=0 game.fx_calm=0
+for i:0..199 game.adapt_effects(false) end
+if game.fx_budget!=90 raise "test","effects recover" end
+for i:0..999 game.adapt_effects(false) end
+if game.fx_budget!=100 raise "test","recovery capped" end
+game.fx_budget=100
 gc.collect() var before=heap_bytes()
 for i:0..999
  game.scene_ms+=25 game.distance+=0.75 game.rain_step(25) game.draw()

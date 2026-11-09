@@ -57,4 +57,4 @@ No TC002 was connected during implementation. Complete this playtest before dist
 5. Check audio, winner feedback and the one-time audio failure fallback. Observe script errors, memory and input latency during a longer session.
 6. Save initials, leave the game, wait at least five seconds for the device store to flush, then reboot and check the records. Verify reset and the old-Matrix upgrade path.
 
-The game lowers its ambient-effect budget after a draw exceeding 20 ms. It keeps gameplay timing unchanged. This fallback is tested with controlled timing; its usefulness on actual TC002 hardware remains to be measured.
+The game lowers its ambient-effect budget when draws exceeding 20 ms are sustained (more than about one in five). Isolated slow draws are ignored, and a long run of fast draws restores the budget step by step. It keeps gameplay timing unchanged. This fallback is tested with controlled timing; its usefulness on actual TC002 hardware remains to be measured.

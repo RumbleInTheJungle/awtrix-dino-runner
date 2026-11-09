@@ -44,7 +44,7 @@ class DinoRunner
 
   var worlds, world, next_world, old_colors, colors, transition_at, hills
   var parallax, parallax_intensity, ambient, density, fixed_world, world_auto
-  var font, fx_budget, bindings, left_pending
+  var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
 
   def init()
     self.font = {
@@ -76,6 +76,7 @@ class DinoRunner
     self.local_pressed = false
     self.gated = true
     self.recover = false
+    self.resume_countdown = false
     self.scene_ms = 0
     self.countdown_at = 0
     self.match_seed = 1
@@ -112,6 +113,8 @@ class DinoRunner
     self.matrix_brightness = int(clamp(num(store.get("matrix_brightness"),40),0,100))
     self.rain_seed = now_ms()%65521+17
     self.fx_budget = 100
+    self.fx_strain = 0
+    self.fx_calm = 0
     self.init_worlds()
     self.type_randomness = 100
     self.distance_randomness = 100
@@ -192,13 +195,20 @@ class DinoRunner
     self.active = true
     self.last = now_ms()
     self.gated = true
+    # A countdown counts wall time, so restart it rather than letting it expire unseen.
+    if self.mode == "countdown" self.countdown_at = self.last end
     rotation.pause()
   end
 
   def on_hide()
     self.active = false
+    # Coming back mid-run should not drop the player straight into motion.
+    if self.mode == "run" self.pause() end
     self.local_duck = false
     self.local_jump = false
+    # A release event may never arrive while hidden; don't block input on return.
+    self.local_pressed = false
+    self.left_pending = false
     gamepad.release(self, 1)
     gamepad.release(self, 2)
     rotation.resume()
@@ -261,6 +271,8 @@ class DinoRunner
     self.local_jump = false
     self.local_duck = false
     self.gated = true
+    self.recover = false
+    self.resume_countdown = false
     self.accumulator = 0
   end
 
@@ -286,6 +298,7 @@ class DinoRunner
     self.mode = "ready"
     self.gated = true
     self.recover = false
+    self.resume_countdown = false
     self.palette()
   end
 
@@ -409,7 +422,15 @@ class DinoRunner
           if self.multiplayer && self.separate self.bindings[self.logical] = slot end
           self.recover = false
         end
-        self.pause()
+        if self.resume_countdown
+          # The run never started: count down again rather than resuming
+          # whatever state the previous run left behind.
+          self.resume_countdown = false
+          self.mode = "countdown"
+          self.countdown_at = now_ms()
+        else
+          self.pause()
+        end
       end
     elif self.mode == "initials"
       if self.multiplayer && self.separate && slot > 0 && slot != self.bindings[self.completed[self.pending]] return end
@@ -494,6 +515,7 @@ class DinoRunner
     var names = [gamepad.ready(1) ? gamepad.name(1) : "", gamepad.ready(2) ? gamepad.name(2) : ""]
     if (self.mode == "run" || self.mode == "countdown") && self.player > 0
       if !gamepad.ready(self.player) || names[0] != self.pad_names[0] || names[1] != self.pad_names[1]
+        self.resume_countdown = self.mode == "countdown"
         self.mode = "pause"
         self.recover = true
         self.jump_until = 0
@@ -1163,7 +1185,8 @@ class DinoRunner
     self.apply_palette()
     clear()
     rect_fill(0, 0, width(), height(), self.bg)
-    if self.mode != "run" && self.mode != "pause"
+    # A countdown interrupted by pad loss has no run scene to show yet.
+    if self.mode != "run" && (self.mode != "pause" || self.resume_countdown)
       self.draw_menu()
       return
     end
@@ -1198,8 +1221,29 @@ class DinoRunner
       rect_fill(0,8,40,6,self.bg)
       self.draw_menu()
     end
-    # Degrade only ambient work if a draw consumes most of a 25ms frame.
-    if self.mode == "run" && now_ms()-draw_started > 20 self.fx_budget = max(0,self.fx_budget-10) end
+    if self.mode == "run" self.adapt_effects(now_ms() - draw_started > 20) end
+  end
+
+  def adapt_effects(slow)
+    # Only ambient work adapts; gameplay never reads fx_budget. A draw using most
+    # of a 25ms frame adds strain and fast draws drain it, so isolated hiccups
+    # (e.g. garbage collection) fade out while sustained slowness (over ~1 in 5
+    # draws) sheds a step of effects. A long fast streak restores a step.
+    if slow
+      self.fx_calm = 0
+      self.fx_strain += 4
+      if self.fx_strain >= 12
+        self.fx_strain = 0
+        self.fx_budget = max(0, self.fx_budget - 10)
+      end
+    else
+      self.fx_strain = max(0, self.fx_strain - 1)
+      self.fx_calm += 1
+      if self.fx_calm >= 200
+        self.fx_calm = 0
+        self.fx_budget = min(100, self.fx_budget + 10)
+      end
+    end
   end
 end
 
