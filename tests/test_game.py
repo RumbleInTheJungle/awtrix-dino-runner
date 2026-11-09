@@ -170,6 +170,33 @@ game.action("a",0)
 if game.mode!="run" raise "test","resume after return" end
 ''')
 
+    def test_results_fanfare_only_for_new_number_one(self):
+        run(SCRIPT, '''
+var played=[]
+game.audio=true
+sound.effect=def(tune) for k:game.tunes.keys() if game.tunes[k]==tune played.push(k) end end end
+def finish_match(multi,a,b)
+  game.multiplayer=multi game.separate=false game.new_match(false)
+  played=[]
+  game.score=a game.finish_run()
+  if multi game.score=b game.finish_run() end
+  while game.mode=="initials"
+    game.initials=[0,0,0] game.letter=2 game.action("a",0)
+  end
+  if game.mode!="results" raise "test","results reached" end
+  return played.find("record")!=nil
+end
+game.board=[] game.add_record("TOP",500)
+for v:[100,200,300,400] game.add_record("LOW",v) end
+if finish_match(false,300,0) raise "test","no fanfare below #1" end
+if finish_match(false,450,0) raise "test","no fanfare for top five but not #1" end
+if finish_match(false,500,0) raise "test","no fanfare for tying #1" end
+if !finish_match(false,501,0) raise "test","fanfare for new #1" end
+if game.best!=501 raise "test","new best saved" end
+if finish_match(true,200,300) raise "test","no multiplayer fanfare below #1" end
+if !finish_match(true,100,700) raise "test","fanfare when second player takes #1" end
+''')
+
     def test_audio_failure_warns_once(self):
         run(SCRIPT, '''
 game.audio=true

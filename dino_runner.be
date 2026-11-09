@@ -36,7 +36,7 @@ class DinoRunner
   var jump_held, local_jump, jump_age, jump_cut, stars, jump_gravity
   var matrix, matrix_brightness, drops, rain_seed
   var player, pad_label
-  var audio, tunes, record_target, record_announced
+  var audio, tunes, record_target, record_announced, match_record
 
   var logical, multiplayer, separate, first, order, turn, match_seed, scores, completed
   var board, pending, initials, letter, menu_index, rank, gated, recover, countdown_at
@@ -86,6 +86,7 @@ class DinoRunner
     self.audio = store.get("sounds") && sound.can("song")
     self.record_target = 0
     self.record_announced = false
+    self.match_record = 0
     var volume = int(clamp(num(store.get("sound_volume"), 60), 0, 100))
     if volume == 0 self.audio = false end
     var prefix = "loop off\nvolume " + str(volume) + "\n"
@@ -286,6 +287,8 @@ class DinoRunner
     if rematch self.first = 1 - self.first else self.first = 0 end
     self.order = self.first == 0 ? [0, 1] : [1, 0]
     self.match_seed = now_ms() % 65521 + 1
+    # The #1 score to beat for this match, before any of its initials are saved.
+    self.match_record = self.best
     self.scores = [0, 0]
     self.completed = []
     self.turn = 0
@@ -333,7 +336,13 @@ class DinoRunner
       self.pending += 1
     end
     self.mode = "results"
-    self.play_event("record")
+    # Fanfare only when this match took #1; an equal score ranks below the older one.
+    for p : self.completed
+      if self.scores[p] > self.match_record
+        self.play_event("record")
+        break
+      end
+    end
     self.menu_index = 0
     self.gated = true
   end
