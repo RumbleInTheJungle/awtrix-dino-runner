@@ -795,18 +795,21 @@ class DinoRunner
   end
 
   def init_worlds()
-    # bg, far, mid, near, ground, soil, hazard light, hazard shade, sky accent
+    # bg, far, mid, near, ground, soil, hazard light, hazard shade, sky accent,
+    # then three signature colours (sig1, sig2, sig3) used by world-specific details.
     self.worlds = [
-      [0x06121A,0x0B2530,0x123921,0x285532,0x78A84B,0x322416,0x88C86A,0x547B45,0xB5993A],
-      [0x1C0D03,0x3C180A,0x512B0E,0x64431C,0xBE9644,0x4B3014,0x67C46D,0xAD8655,0xD6AA42],
-      [0x020C09,0x082017,0x15382C,0x305D38,0x6E9266,0x202E27,0xB5BBA0,0x6A8665,0x438A58],
-      [0x020310,0x0D1029,0x22203B,0x473049,0x25A7BC,0x101C35,0xF28ACC,0xC7A850,0x4A83A0],
-      [0x030B1C,0x182C48,0x28495B,0x406C79,0xB9DDDF,0x183C55,0x8BE6ED,0x5FADCF,0x8AA9BE],
-      [0x100303,0x24090A,0x3D1410,0x5B2113,0xC45327,0x3E1110,0xEEA34A,0xAC6658,0xC46E28],
-      [0x01020A,0x151526,0x303043,0x48475A,0x9DA2B4,0x25293A,0xBDCAD7,0x7496AE,0x287F8B],
-      [0x040611,0x10152A,0x192A34,0x344243,0x607C71,0x22252F,0xA4B8C4,0x6C927C,0x607894],
-      [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4],
-      [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55]
+      [0x06121A,0x0B2530,0x123921,0x285532,0x78A84B,0x322416,0x88C86A,0x547B45,0xB5993A,0xB5993A,0xB5993A,0xB5993A],
+      [0x1C0D03,0x3C180A,0x512B0E,0x64431C,0xBE9644,0x4B3014,0x67C46D,0xAD8655,0xD6AA42,0xD6AA42,0xD6AA42,0xD6AA42],
+      [0x020C09,0x082017,0x15382C,0x305D38,0x6E9266,0x202E27,0xB5BBA0,0x6A8665,0x438A58,0x438A58,0x438A58,0x438A58],
+      # Neon: sig1 cyan windows, sig2 magenta windows, sig3 neon sign strips.
+      [0x020310,0x13173C,0x22203B,0x473049,0x25A7BC,0x101C35,0xF5C842,0xD8459E,0x9C7E22,0x1E8FB0,0x9A2C8C,0xB8309C],
+      [0x030B1C,0x182C48,0x28495B,0x406C79,0xB9DDDF,0x183C55,0x8BE6ED,0x5FADCF,0x8AA9BE,0x8AA9BE,0x8AA9BE,0x8AA9BE],
+      # Volcano: sig1 bright lava, sig2 dim lava streams, sig3 basalt.
+      [0x100303,0x24090A,0x3D1410,0x5B2113,0xC45327,0x5A0F06,0xFFB347,0xC2452A,0xC46E28,0xFF7A1A,0x6A1806,0x5A281E],
+      [0x01020A,0x151526,0x303043,0x48475A,0x9DA2B4,0x25293A,0xBDCAD7,0x7496AE,0x287F8B,0x287F8B,0x287F8B,0x287F8B],
+      [0x040611,0x10152A,0x192A34,0x344243,0x607C71,0x22252F,0xA4B8C4,0x6C927C,0x607894,0x607894,0x607894,0x607894],
+      [0x030313,0x12112C,0x242248,0x353167,0x38A5BC,0x141E39,0x63E4ED,0xCE7DDC,0x557AB4,0x557AB4,0x557AB4,0x557AB4],
+      [0x000000,0x001307,0x00250F,0x00401A,0x009933,0x001508,0x66FF88,0x22BB55,0x33AA55,0x33AA55,0x33AA55,0x33AA55]
     ]
     self.hills = [0,0,1,1,2,3,3,4,4,3,2,2,1,0,0,1,2,3,3,2,1,1,0,0,1,0]
     self.world = 0
@@ -864,12 +867,12 @@ class DinoRunner
     var phase = clamp((self.scene_ms-self.transition_at)/500.0,0.0,1.0)
     if phase >= 0.5 self.world = self.next_world end
     self.matrix = self.world == 9
-    # Blend the nine world colours only when the transition phase moves; outside a
+    # Blend the twelve world colours only when the transition phase moves; outside a
     # transition this happens once instead of dozens of times per frame.
     if phase != self.shade_phase
       self.shade_phase = phase
       var shades = []
-      for i : 0 .. 8 shades.push(self.blend(self.old_colors[i],self.colors[i],phase)) end
+      for i : 0 .. 11 shades.push(self.blend(self.old_colors[i],self.colors[i],phase)) end
       self.shades = shades
     end
     self.bg = self.shades[0]
@@ -898,6 +901,9 @@ class DinoRunner
     var mid = self.shade(2)
     var near = self.shade(3)
     var accent = self.shade(8)
+    var sig1 = self.shade(9)
+    var sig2 = self.shade(10)
+    var sig3 = self.shade(11)
     var f = self.offset(0.04)
     var m = self.offset(0.10)
     var n = self.offset(0.24)
@@ -918,12 +924,43 @@ class DinoRunner
       elif kind == 2
         var top = 7+(a/7)%4
         line(x,top,x,13,far)
+        if w == 3
+          # Lit windows: two window columns per seven-pixel building, a fixed
+          # per-building pattern so the skyline scrolls without flicker.
+          var col = a%7
+          if col == 2 || col == 4
+            var bld = a/7
+            var yy = top+1
+            while yy <= 12
+              var lit = (bld*5+yy*3+col)%3
+              if lit == 0 pixel(x,yy,sig1)
+              elif lit == 1 && bld%3 == 0 pixel(x,yy,sig2)
+              end
+              yy += 2
+            end
+          end
+        end
         if b%17 < 8
-          line(x,8+(b/17)%3,x,13,mid)
+          var mtop = 8+(b/17)%3
+          line(x,mtop,x,13,mid)
           if b%4 == 0 pixel(x,10,near) end
+          # Neon signs: vertical strips and rooftop bars on alternate buildings.
+          if w == 3
+            if (b/17)%2 == 0
+              if b%17 == 5 line(x,mtop+1,x,mtop+3,sig3) end
+            elif b%17 >= 2 && b%17 <= 4
+              pixel(x,mtop+1,sig3)
+            end
+          end
         end
       else
         line(x,6,x,6+h,far)
+        if w == 5
+          # Thin lava falls from the ceiling and a few glowing stalactite tips.
+          if a%29 == 15 line(x,7+h,x,13,sig2)
+          elif a%13 == 6 && h >= 2 pixel(x,6+h,accent)
+          end
+        end
         if b%21 < 4 line(x,6,x,8+j/2,mid) end
         if a%29 < 2 line(x,10,x,13,far) end
       end
@@ -942,8 +979,9 @@ class DinoRunner
         line(x-1,10,x+3,10,near)
         pixel(x+1,12,far)
       elif w == 3
-        line(x,8,x,12,near)
-        pixel(x+2,9,accent)
+        # Street lamp.
+        line(x,8,x,13,near)
+        pixel(x+1,8,accent)
       elif w == 4
         line(x,10,x,13,mid)
         line(x-1,11,x+1,11,near)
@@ -1027,6 +1065,17 @@ class DinoRunner
         if t%40 < 4 pixel(x,13,near) end
       end
     end
+    if w == 5
+      # A lava drop falls from a glowing stalactite tip every few seconds.
+      var cycle = self.scene_ms%4000
+      if cycle < 1200
+        var f = self.offset(0.04)
+        var dx = ((6-f)%13+13)%13+26
+        var tip = 7+self.hills[(((dx+f)%104)/2)%26]
+        var dy = tip+cycle/150
+        if dy <= 13 pixel(dx,dy,self.shade(9)) end
+      end
+    end
     if w == 7 && t%120 < 2
       pixel(40,6,color)
       pixel(39,7,color)
@@ -1057,15 +1106,34 @@ class DinoRunner
         line(x,top+2,x+2,top+2,dark)
         line(x+4,top,x+4,top+1,light)
         line(x+2,top+1,x+4,top+1,light)
+      elif self.world == 3
+        # Industrial barrier: yellow top rail, magenta posts, warning stripes.
+        var top = 14-o[3]
+        rect_fill(x+1,top+1,3,o[3]-1,self.shade(1))
+        line(x,top,x+4,top,light)
+        line(x,top+1,x,13,dark)
+        line(x+4,top+1,x+4,13,dark)
+        for yy : top+1..13
+          for xx : 1..3
+            if (xx+yy)%3 == 0 pixel(x+xx,yy,light) end
+          end
+        end
+      elif self.world == 5
+        # Basalt block with a glowing crust and a lava crack.
+        var top = 14-o[3]
+        rect_fill(x,top,5,o[3],self.shade(11))
+        line(x,top,x+4,top,light)
+        line(x,top+1,x,13,dark)
+        line(x+4,top+1,x+4,13,dark)
+        pixel(x+2,top+1,self.shade(9))
+        pixel(x+3,top+2,self.shade(9))
+        pixel(x+2,top+3,dark)
       else
         var top = 14-o[3]
         rect_fill(x,top,5,o[3],dark)
         line(x,top,x+4,top,light)
         line(x,top,x,13,light)
-        if self.world == 3
-          pixel(x+1,top+1,light)
-          pixel(x+3,top+1,light)
-        elif self.world == 4 || self.world == 8
+        if self.world == 4 || self.world == 8
           line(x+2,top,x+2,13,light)
         elif self.world == 2
           line(x+1,12,x+3,12,self.shade(3))
@@ -1200,6 +1268,12 @@ class DinoRunner
       var nx = (i*13-near_offset%52+52)%52
       pixel(nx,15,self.shade(3))
       if self.world == 4 || self.world == 8 pixel(nx+1,15,self.shade(8)) end
+      # Neon floor lights and volcano lava flecks in the lower edge.
+      if self.world == 3 pixel(nx+1,15,self.ground) end
+      if self.world == 5
+        pixel(nx+1,15,self.shade(9))
+        pixel((nx+7)%52,15,self.shade(9))
+      end
     end
     self.draw_obstacles()
     var yy = 14 - round(self.y)
