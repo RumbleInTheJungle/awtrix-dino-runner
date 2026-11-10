@@ -1,7 +1,7 @@
 # @name Dino Runner
 # @desc Turn-based dinosaur runner with ten pixel worlds
 # @author RumbleInTheJungle
-# @version 2026.11.0
+# @version 2026.11.1
 # @display 52x16
 # @ondemand
 # @needs gamepad
