@@ -235,11 +235,14 @@ game.draw()
 var t0=clock_ms
 while clock_ms-t0<2975 tick(25) game.draw() end
 if game.mode!="countdown" raise "test","still counting" end
-var cracks=0 for p:played if p=="crack" cracks+=1 end end
-if cracks!=3 || played.find("roar")!=nil raise "test","one crack per beat: "+str(played) end
+if played!=["crack1","crack1","crack2"] raise "test","cracks on 3, 2 and 1: "+str(played) end
 tick(25)
-if game.mode!="run" || played[-1]!="roar" raise "test","roar at the start" end
+if game.mode!="run" || played[-1]!="crack3" raise "test","shell bursts at zero: "+str(played) end
 if json.dump(game.obstacles)!=course raise "test","same course after countdown" end
+for i:0..8 tick(25) end
+if played.find("roar")!=nil raise "test","roar waits for the burst" end
+tick(25)
+if played.find("roar")==nil raise "test","roar a quarter second later: "+str(played) end
 # The hatch is only an overlay: physics continues normally beneath it.
 for i:0..27 tick(25) game.draw() end
 if game.mode!="run" || game.y!=0.0 || game.score<20 raise "test","hatch does not affect the run" end
@@ -345,10 +348,12 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(install.sync_sounds('http://clock','dino',send,sounds),[])
             self.assertEqual([c[1] for c in calls],['GET'])
 
-    def test_shipped_roar_is_a_small_mp3(self):
-        data=(ROOT/'sounds'/'roar.mp3').read_bytes()
-        self.assertLess(len(data),16384)
-        self.assertTrue(data[:3]==b'ID3' or (data[0]==0xFF and data[1]&0xE0==0xE0))
+    def test_shipped_sounds_are_small_mp3s_the_script_plays(self):
+        for name in ['roar','crack1','crack2','crack3']:
+            data=(ROOT/'sounds'/(name+'.mp3')).read_bytes()
+            self.assertLess(len(data),16384)
+            self.assertTrue(data[:3]==b'ID3' or (data[0]==0xFF and data[1]&0xE0==0xE0))
+            self.assertIn('"%s": ["%s", '%(name,name),SCRIPT)
 
     def test_new_install_and_device_error(self):
         def missing(base,path,method='GET',body=None,content_type='application/json'):

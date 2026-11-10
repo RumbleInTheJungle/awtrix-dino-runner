@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Synthesise the hatching roar and encode it as sounds/roar.mp3.
+"""Synthesise the game's sounds and encode them as MP3s in sounds/.
+
+roar.mp3 plays when the dino hatches; crack1-3.mp3 play on the countdown beats.
+
 
 The roar is generated from scratch (no samples, no speech voices): a deep, rough
 glottal pulse train with a growl from period doubling, a chest resonance, breath
 noise, an irregular low rumble, vowel formant filters and soft clipping. Its shape
 follows the word R-O-A-R: a soft rolled R swells into an O, peaks on an open A and
 fades on a darker, gently rolled R.
+
+The eggshell cracks are clusters of tiny brittle clicks (band-passed noise bursts of
+a few milliseconds) over a short dull knock of the shell. Each beat cracks harder:
+more clicks, spread wider and louder, and the last one splinters on.
 
 Requires the `lame` encoder on PATH (for example `brew install lame`).
 """
@@ -123,6 +130,39 @@ def roar():
     return [s / peak * 0.92 for s in samples]
 
 
+def crack(level, seed):
+    """Eggshell crack for beat level 1-3."""
+    rnd = random.Random(seed)
+    clicks = [3, 5, 8][level - 1]
+    spread = [0.06, 0.11, 0.18][level - 1]
+    gain = [0.6, 0.8, 1.0][level - 1]
+    duration = spread + 0.12 + (0.08 if level == 3 else 0.0)
+    out = [0.0] * int(duration * RATE)
+    # The dull knock of the shell gives the crack body on a small speaker.
+    knock = Biquad('bp', 420, 3.0)
+    for i in range(int(0.03 * RATE)):
+        t = i / RATE
+        out[i] += 1.4 * knock(rnd.uniform(-1, 1)) * math.exp(-t / 0.008)
+    starts = sorted([0.0] + [rnd.uniform(0.004, spread) for _ in range(clicks - 1)])
+    if level == 3:
+        # Splinters keep trickling after the main break.
+        starts += sorted(rnd.uniform(spread, spread + 0.08) for _ in range(4))
+    for k, start in enumerate(starts):
+        shell = Biquad('bp', rnd.uniform(2600, 5200), 2.5)
+        ring = Biquad('bp', rnd.uniform(1500, 2200), 6.0)
+        amp = rnd.uniform(0.55, 1.0) * (0.45 if k >= clicks else 1.0)
+        decay = rnd.uniform(0.0015, 0.004)
+        first = int(start * RATE)
+        for i in range(int(0.02 * RATE)):
+            if first + i >= len(out):
+                break
+            t = i / RATE
+            noise = rnd.uniform(-1, 1) * math.exp(-t / decay)
+            out[first + i] += amp * (2.2 * shell(noise) + 0.8 * ring(noise))
+    peak = max(abs(s) for s in out) or 1.0
+    return [math.tanh(1.3 * s / peak) / math.tanh(1.3) * 0.92 * gain for s in out]
+
+
 def write_wav(path, samples):
     with wave.open(str(path), 'wb') as w:
         w.setnchannels(1)
@@ -135,21 +175,23 @@ def write_wav(path, samples):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--out', type=pathlib.Path, default=ROOT / 'sounds' / 'roar.mp3')
-    parser.add_argument('--wav', type=pathlib.Path, help='Also keep the uncompressed WAV here')
+    parser.add_argument('--out-dir', type=pathlib.Path, default=ROOT / 'sounds')
+    parser.add_argument('--wav', action='store_true', help='Also keep uncompressed WAVs next to the MP3s')
     args = parser.parse_args()
     lame = shutil.which('lame')
     if not lame:
         raise SystemExit('lame not found; install it, for example with: brew install lame')
-    samples = roar()
+    sounds = {'roar': roar(), 'crack1': crack(1, 31), 'crack2': crack(2, 32), 'crack3': crack(3, 33)}
+    args.out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        wav = pathlib.Path(tmp) / 'roar.wav'
-        write_wav(wav, samples)
-        if args.wav:
-            shutil.copyfile(wav, args.wav)
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([lame, '--quiet', '-m', 'm', '-b', '32', wav, str(args.out)], check=True)
-    print(f'Wrote {args.out} ({args.out.stat().st_size} bytes, {DURATION:.2f} s)')
+        for name, samples in sounds.items():
+            wav = pathlib.Path(tmp) / (name + '.wav')
+            write_wav(wav, samples)
+            if args.wav:
+                shutil.copyfile(wav, args.out_dir / wav.name)
+            out = args.out_dir / (name + '.mp3')
+            subprocess.run([lame, '--quiet', '-m', 'm', '-b', '32', wav, str(out)], check=True)
+            print(f'Wrote {out} ({out.stat().st_size} bytes, {len(samples) / RATE:.2f} s)')
 
 
 if __name__ == '__main__':

@@ -43,7 +43,7 @@ class DinoRunner
   var parallax, parallax_intensity, ambient, density, fixed_world, world_auto
   var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
   var shades, shade_phase, rain_ramps, player_colors, layer_floor
-  var countdown_beat, big_digits, egg_rows, egg_cracks, shell_bits, roar_font
+  var countdown_beat, big_digits, egg_rows, egg_cracks, shell_bits, roar_font, roar_pending
   var bit_a, bit_b, bit_start, bit_select
 
   def init()
@@ -80,6 +80,7 @@ class DinoRunner
     self.scene_ms = 0
     self.countdown_at = 0
     self.countdown_beat = -1
+    self.roar_pending = false
     # 7x10 countdown digits (index = digit); each row is a seven-bit mask.
     self.big_digits = [nil,
       [12,28,60,12,12,12,12,12,12,63],
@@ -106,13 +107,16 @@ class DinoRunner
     if volume == 0 self.audio = false end
     var prefix = "loop off\nvolume " + str(volume) + "\n"
     var blip = "inst blip wave=tri attack=6 decay=120 sustain=40 release=40 cutoff=2400 volume=90\n"
+    var click = {"song": prefix + "bpm 240\n"
+      + "inst crack wave=noise filter=hp cutoff=2500 attack=0 decay=45 sustain=0 volume=90\n"
+      + "crack: c5:1"}
     self.tunes = {
       "small": {"song": prefix + "bpm 240\n" + blip + "blip: c5:1 e5:2"},
       "high": {"song": prefix + "bpm 240\n" + blip + "blip: c5:1 g5:1 c6:2"},
       "switch": {"song": prefix + "bpm 120\n" + blip + "blip: g5:1 r:1/2 c6:2"},
-      "crack": {"song": prefix + "bpm 240\n"
-        + "inst crack wave=noise filter=hp cutoff=2500 attack=0 decay=45 sustain=0 volume=90\n"
-        + "crack: c5:1"},
+      # Eggshell cracks for the countdown beats, harder each time; the script's own
+      # MP3s when installed with it, else a synthesised click.
+      "crack1": ["crack1", click], "crack2": ["crack2", click], "crack3": ["crack3", click],
       # The script's own roar.mp3 when installed with it, else a synthesised roar.
       # The clock plays the first entry it can; a missing file is skipped.
       "roar": ["roar", {"song": prefix + "bpm 120\n"
@@ -250,6 +254,7 @@ class DinoRunner
 
   def start()
     self.mode = "run"
+    self.roar_pending = false
     self.scene_ms = 0
     self.record_target = self.best
     self.record_announced = false
@@ -607,12 +612,16 @@ class DinoRunner
       var beat = (ms - self.countdown_at) / 1000
       if beat != self.countdown_beat
         self.countdown_beat = beat
-        if beat < 3 self.play_event("crack") end
+        # The crack sound lands with the new crack drawn on the egg: two small
+        # cracks, a bigger one, then the shell bursts at zero.
+        if beat < 3 self.play_event(["crack1", "crack1", "crack2"][beat]) end
       end
       if ms - self.countdown_at >= 3000
         self.seed = self.match_seed
         self.start()
-        self.play_event("roar")
+        self.play_event("crack3")
+        # The roar follows the bursting shell a quarter second later.
+        self.roar_pending = true
         self.gated = true
       end
       return
@@ -625,6 +634,10 @@ class DinoRunner
     self.jump_held = !self.gated && (self.local_jump || (buttons & self.bit_a) != 0 || up)
     self.duck = !self.gated && self.y <= 0.0 && (self.local_duck || down || (buttons & self.bit_b) != 0)
     self.scene_ms += elapsed
+    if self.roar_pending && self.scene_ms >= 250
+      self.roar_pending = false
+      self.play_event("roar")
+    end
     if self.ambient && self.density > 0 && self.fx_budget > 0 self.rain_step(elapsed) end
     self.accumulator += elapsed
     while self.accumulator >= 25 && self.mode == "run"
@@ -1507,12 +1520,15 @@ class DinoRunner
         if py <= 13 pixel(round(p[0] + p[2] * s), py, shell) end
       end
     end
+    # The roar starts a quarter second after the shell bursts, in step with its sound.
+    var r = t - 250
+    if r < 0 return end
     # Open jaw while roaring.
-    if t < 900 && self.y <= 0.0 && !self.duck pixel(11, 10, self.tint) end
+    if r < 900 && self.y <= 0.0 && !self.duck pixel(11, 10, self.tint) end
     # "ROAR!" banner: white flash, a short shake, gold, then fading out.
-    var color = t < 120 ? 0xFFFFFF : self.gold
-    if t > 1000 color = self.blend(self.bg, self.gold, 1.0 - (t - 1000) / 500.0) end
-    var shake = t < 300 ? ((t / 50) % 2 == 0 ? 1 : -1) : 0
+    var color = r < 120 ? 0xFFFFFF : self.gold
+    if r > 1000 color = self.blend(self.bg, self.gold, 1.0 - (r - 1000) / 500.0) end
+    var shake = r < 300 ? ((r / 50) % 2 == 0 ? 1 : -1) : 0
     self.banner("ROAR!", 13 + shake, 0, color, self.bg)
   end
 
@@ -1571,7 +1587,7 @@ class DinoRunner
     end
     # Hatching flourish over the first moments of a run; purely visual. The big
     # banner replaces the HUD while it shows, when the score is still near zero.
-    if self.scene_ms < 1500 && self.distance < 60.0
+    if self.scene_ms < 1750 && self.distance < 70.0
       self.draw_hatch()
     else
       self.hud()
