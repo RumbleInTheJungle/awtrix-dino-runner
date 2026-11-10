@@ -212,6 +212,71 @@ if game.mode!="menu" || game.tour || game.world_auto || game.fixed_world!=4 rais
 if game.stage!=0 raise "test","menu back on a fresh stage" end
 ''')
 
+    def test_mqtt_reports_under_the_clocks_prefix(self):
+        run(SCRIPT, '''
+import json
+def tick(ms) clock_ms+=ms game.step() end
+def states() var r=[] for p:published if p[0]==game.mqtt_root+"/state" r.push(json.load(p[1])) end end return r end
+def events() var r=[] for p:published if p[0]==game.mqtt_root+"/event" r.push(json.load(p[1])["event"]) end end return r end
+game.setup()
+# No prefix set: the clock's uid is used, read from the local API.
+if size(http_calls)!=1 || http_calls[0][0]!="http://127.0.0.1/api/v1/system" raise "test","asks for prefix" end
+http_calls[0][1]("\\"mqttPrefix\\":\\"\\",\\"mqttTls\\":false", 200)
+if size(http_calls)!=2 || http_calls[1][0]!="http://127.0.0.1/api/v1/device" raise "test","asks for uid" end
+http_calls[1][1]("\\"uid\\":\\"ccc4b2779912\\",\\"hostname\\"", 200)
+if game.mqtt_root!="ccc4b2779912/dinorunner" raise "test","uid root "+game.mqtt_root end
+published=[]
+game.on_show() tick(25)
+var s=states()
+if size(s)!=1 || s[0]["mode"]!="menu" raise "test","menu state" end
+for i:0..39 tick(25) end
+if size(states())!=1 raise "test","no repeats while nothing changes" end
+# A solo run: countdown, run, night, crash, results.
+game.world_auto=false game.fixed_world=0 game.best=99999
+game.multiplayer=false game.new_match(false) game.action("a",0) tick(25)
+s=states()[-1]
+if s["mode"]!="countdown" || s["room"]!="game" || !s.contains("enter") raise "test","countdown enters "+str(s) end
+for i:0..130 tick(25) end
+s=states()[-1]
+if s["mode"]!="run" || s["world"]!=1 || s["phase"]!="day" || s["dark"] || s["color"]!="#FFD890" raise "test","run day "+str(s) end
+if s.contains("enter") raise "test","enter only once" end
+if events()!=["roar"] raise "test","roar event "+str(events()) end
+game.obstacles=[[200.0,0,5,4],[300.0,0,5,4]]
+game.distance=499.9 game.score=499 for i:0..3 tick(25) end
+s=states()[-1]
+if s["phase"]!="night" || !s["dark"] || s["color"]!="#3050C0" raise "test","night "+str(s) end
+game.obstacles=[[6.0,0,5,4]] tick(25) tick(25)
+if events()[-1]!="crash" raise "test","crash event" end
+s=states()[-1]
+if s["mode"]!="results" || s["score"]!=game.score || s["room"]!="normal" || !s.contains("leave") raise "test","results "+str(s) end
+var before=size(published)
+game.on_hide()
+if states()[-1]["mode"]!="off" || states()[-1].contains("leave") raise "test","off when hidden" end
+if size(published)!=before+1 raise "test","one message on hide" end
+# Two players: the room stays dimmed between turns.
+game.on_show() tick(25)
+game.multiplayer=true game.separate=false game.new_match(false) tick(25)
+if states()[-1]["room"]!="normal" raise "test","first ready is not yet the game" end
+game.action("a",0) for i:0..130 tick(25) end
+game.obstacles=[[6.0,0,5,4]] tick(25) tick(25)
+s=states()[-1]
+if s["mode"]!="ready" || s["room"]!="game" || s.contains("enter") || s.contains("leave") raise "test","second turn keeps the room "+str(s) end
+game.multiplayer=false
+# Permanent night worlds are always dark and report a late phase.
+game.on_show() game.fixed_world=3 game.start() game.stage=1 game.palette() tick(25)
+s=states()[-1]
+if s["phase"]!="late" || !s["dark"] || s["world"]!=4 raise "test","late "+str(s) end
+# A prefix set on the clock wins; a refused request keeps the fallback.
+http_calls=[]
+game.mqtt_root="dinorunner" game.setup()
+http_calls[0][1]("\\"mqttPrefix\\":\\"trix\\",", 200)
+if game.mqtt_root!="trix/dinorunner" || size(http_calls)!=1 raise "test","prefix root" end
+http_calls=[]
+game.mqtt_root="dinorunner" game.setup()
+http_calls[0][1](nil, 401)
+if game.mqtt_root!="dinorunner" || size(http_calls)!=1 raise "test","login fallback" end
+''')
+
     def test_results_fanfare_only_for_new_number_one(self):
         run(SCRIPT, '''
 var played=[]

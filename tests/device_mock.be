@@ -16,6 +16,12 @@ store.set = def(key, value) saved[key] = value end
 var sound = module("sound")
 sound.can = /x -> false
 sound.effect = /x -> nil
+var published = []
+var mqtt = module("mqtt")
+mqtt.publish = def(topic, payload) published.push([topic, str(payload)]) end
+var http_calls = []
+var http = module("http")
+http.get = def(url, cb, opts) http_calls.push([url, cb, opts]) end
 var timer = module("timer")
 timer.every = def(ms, callback) return 1 end
 var rotation = module("rotation")

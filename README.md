@@ -16,6 +16,8 @@ Rows show grassland/desert, jungle/neon city, ice/volcano, moon/storm and crysta
 
 The game stays out of automatic app rotation. Leaving it returns to your clock apps. It needs no game server or MQTT.
 
+With MQTT set up on the clock, Home Assistant can dim your room while you play and follow the game's day, night and worlds. See [Room lights with Home Assistant](docs/HOME_ASSISTANT.md).
+
 For an existing installation, use the installer below to preserve an enabled old Matrix setting. When replacing the source by hand, first note that setting, then select **World mode: fixed → Fixed world: 10** after saving. Existing colour and sound settings keep their values when you update the same script name.
 
 ```sh

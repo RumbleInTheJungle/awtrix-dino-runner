@@ -1,0 +1,165 @@
+blueprint:
+  name: Dino Runner room lights
+  description: >-
+    Dims room lights while Dino Runner runs on an AWTRIX NG clock and follows the
+    game: brighter by day, darker at night, and optionally tinted in each world's
+    colour on colour lights. The lights change from the countdown to the end of
+    the match and return to how they were when the match ends, the game is left
+    or the clock goes offline. Lights without colour only change brightness.
+  domain: automation
+  source_url: https://github.com/RumbleInTheJungle/awtrix-dino-runner/blob/main/homeassistant/dino_runner_lights.yaml
+  input:
+    clock_prefix:
+      name: Clock MQTT prefix
+      description: >-
+        The clock's MQTT prefix. If none is set on the clock, use its uid: twelve
+        lowercase hex characters, shown as "uid" in the clock's device info. Leave
+        this empty only if the clock has an HTTP login; the game then reports
+        under dinorunner/.
+      default: ""
+      selector:
+        text:
+    lights:
+      name: Lights
+      selector:
+        entity:
+          filter:
+            - domain: light
+          multiple: true
+    day_brightness:
+      name: Day brightness
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    night_brightness:
+      name: Night brightness
+      description: Used at night and in the worlds that are always dark.
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    world_colors:
+      name: World colours
+      description: Tint colour lights in each world's colour, moonlight blue at night.
+      default: true
+      selector:
+        boolean:
+    color_strength:
+      name: Colour strength
+      description: 0% keeps colour lights white, 100% uses the full world colour.
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    transition:
+      name: Transition
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.5
+          unit_of_measurement: s
+
+# One light command per change, in order; the game sends a few messages a minute.
+mode: queued
+max: 10
+
+trigger_variables:
+  prefix: !input clock_prefix
+
+triggers:
+  - trigger: mqtt
+    topic: "{{ prefix ~ '/dinorunner/state' if prefix else 'dinorunner/state' }}"
+    id: state
+  - trigger: mqtt
+    topic: "{{ prefix ~ '/availability' if prefix else 'dinorunner/availability' }}"
+    payload: "offline"
+    id: offline
+
+variables:
+  lights: !input lights
+  day_brightness: !input day_brightness
+  night_brightness: !input night_brightness
+  world_colors: !input world_colors
+  color_strength: !input color_strength
+  transition: !input transition
+  scene_id: "dino_runner_{{ (prefix or 'clock') | slugify }}"
+  scene_entity: "scene.{{ scene_id }}"
+  saved: "{{ states.scene | selectattr('entity_id', 'eq', scene_entity) | list | count > 0 }}"
+  msg: "{{ trigger.payload_json if trigger.id == 'state' and trigger.payload_json is mapping else {} }}"
+
+actions:
+  - choose:
+      # The match ended, the game was left or the clock went offline: put the
+      # room back exactly once.
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'offline' or msg.get('leave', false) }}"
+        sequence:
+          - condition: template
+            value_template: "{{ saved }}"
+          - action: scene.turn_on
+            target:
+              entity_id: "{{ scene_entity }}"
+            data:
+              transition: "{{ transition }}"
+          - action: scene.delete
+            target:
+              entity_id: "{{ scene_entity }}"
+      # The game is running: save the room once, then follow day, night and world.
+      - conditions:
+          - condition: template
+            value_template: "{{ msg.get('room') == 'game' }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ msg.get('enter', false) and not saved }}"
+            then:
+              - action: scene.create
+                data:
+                  scene_id: "{{ scene_id }}"
+                  snapshot_entities: "{{ lights }}"
+          - repeat:
+              for_each: "{{ lights }}"
+              sequence:
+                - variables:
+                    modes: "{{ state_attr(repeat.item, 'supported_color_modes') or [] }}"
+                    colour: >-
+                      {{ world_colors and color_strength > 0 and
+                         (modes | select('in', ['hs', 'xy', 'rgb', 'rgbw', 'rgbww']) | list | count > 0) }}
+                    level: "{{ night_brightness if msg.get('dark', false) else day_brightness }}"
+                    tint: >-
+                      {% set c = msg.get('color', '#FFFFFF') %}
+                      {% set s = color_strength / 100 %}
+                      {% set ns = namespace(out=[]) %}
+                      {% for i in [1, 3, 5] %}
+                        {% set v = c[i:i + 2] | int(255, base=16) %}
+                        {% set ns.out = ns.out + [(255 - (255 - v) * s) | round | int] %}
+                      {% endfor %}
+                      {{ ns.out }}
+                - if:
+                    - condition: template
+                      value_template: "{{ colour }}"
+                  then:
+                    - action: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: "{{ level }}"
+                        rgb_color: "{{ tint }}"
+                        transition: "{{ transition }}"
+                  else:
+                    - action: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: "{{ level }}"
+                        transition: "{{ transition }}"

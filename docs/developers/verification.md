@@ -14,7 +14,7 @@ The host compiles the checkout’s actual Berry interpreter with its existing co
 
 ## Results on 2026-11-10
 
-All 22 Python test groups pass. The session suite inside them passes 113 Berry assertions. Checks cover:
+All 23 Python test groups pass. The session suite inside them passes 113 Berry assertions. Checks cover:
 
 - Fixed rules, on-demand metadata, no idle takeover, quiet default logs and optional debug messages.
 - Clock controls, shared and separate controllers, neutral input gates, held countdown buttons and direction edges.
@@ -28,6 +28,7 @@ All 22 Python test groups pass. The session suite inside them passes 113 Berry a
 - A minimum LED level for far, mid, near and soil colours in every world except Matrix, a lower night floor in the five worlds with a moonlit night, far ≤ mid ≤ near and decoration below hazard brightness by day and night.
 - A moonlit night that is darker and cooler than the day in far, mid and near scenery, with a nearly black sky and unchanged hazards; a late phase in the five permanent night worlds that changes only sky and accents; a 1.5-second dusk or dawn fade with a horizon band within one world, none on the moon base, and the half-second fade on a change of world.
 - The world tour: every world by day and by night or late phase at five-second steps, no ending on collisions, constant speed, no sounds, no saved scores, pausing when hidden and the world setting restored on return to the menu.
+- MQTT reports under the clock's prefix, its uid when none is set, or `dinorunner/` when the local API refuses; one state message per change of mode, world or time of day and none in between; `enter` and `leave` exactly where the room lights start and stop following the match, including a kept room between two players' turns; `off` when hidden; and the roar and crash events.
 - All ten worlds, day/night variants, P1/P2 colours, green Matrix dinos, renderer isolation from obstacle RNG, and exact paused-frame equality.
 - Reduced ambient-effect work after sustained slow draws, no reaction to isolated spikes, step-by-step recovery and no adjustment while paused.
 

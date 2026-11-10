@@ -19,12 +19,15 @@
 # @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=% group="Sound"
 # Required Notice: Copyright © 2026 Thomas Stalder (RumbleInTheJungle) https://github.com/RumbleInTheJungle/awtrix-dino-runner
 # License: PolyForm Noncommercial 1.0.0 https://polyformproject.org/licenses/noncommercial/1.0.0
-# Native AWTRIX NG TC002 on-demand game, 52x16. No server or MQTT required.
+# Native AWTRIX NG TC002 on-demand game, 52x16. No server or MQTT required; with MQTT
+# set up, it reports its state under <prefix>/dinorunner/ for home automation.
 # Active player: A jump/start/retry, B or D-pad down duck, START pause,
 # SELECT quit. Clock: select jump/retry, right hold duck, left pause.
 
 import gamepad
+import json
 import math
+import string
 
 class DinoRunner
   var mode, best, score, label, local_duck
@@ -47,6 +50,7 @@ class DinoRunner
   var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
   var shades, shade_phase, rain_ramps, player_colors, layer_floor
   var night_floor, has_night, fade_ms, glow, horizon, tour, tour_auto
+  var mqtt_root, moods, sent_mode, sent_world, sent_odd, sent_game
   var countdown_beat, big_digits, egg_rows, egg_cracks, shell_bits, roar_font, roar_pending
   var dim_shades, dim_source, player_labels
   var bit_a, bit_b, bit_start, bit_select
@@ -63,6 +67,12 @@ class DinoRunner
       "<":[1,2,4,2,1],">":[4,2,1,2,4]," ":[0,0,0,0,0]}
     self.mode = "menu"
     self.tour = false
+    self.mqtt_root = "dinorunner"
+    self.sent_game = false
+    # A room-light colour per world for home automation, and moonlight for the
+    # day worlds at night.
+    self.moods = [0xFFD890, 0xFFA040, 0x60D060, 0xD040C0, 0xA0D8FF,
+                  0xFF4010, 0x8090FF, 0x6060C0, 0x40E0F0, 0x00FF40, 0x3050C0]
     self.multiplayer = store.get("last_multiplayer", false)
     self.separate = store.get("separate_controls", false)
     self.menu_index = self.multiplayer ? 1 : 0
@@ -224,6 +234,75 @@ class DinoRunner
     if id == nil
       raise "runtime_error", "No free game timer"
     end
+    # Report under the clock's own MQTT prefix, or its uid when none is set, so
+    # several clocks on one broker stay apart. With an HTTP login on the clock
+    # the local API refuses, and reports stay under dinorunner/.
+    http.get("http://127.0.0.1/api/v1/system", / b, st -> self.on_prefix(b, st),
+             {'find': "\"mqttPrefix\":\"", 'keep': 64})
+  end
+
+  # The quoted value at the start of a found answer, or nil.
+  def quoted(b, st, key)
+    if st != 200 || b == nil return nil end
+    var start = size(key)
+    var stop = string.find(b, "\"", start)
+    return stop < start ? nil : b[start .. stop - 1]
+  end
+
+  def on_prefix(b, st)
+    var prefix = self.quoted(b, st, "\"mqttPrefix\":\"")
+    if prefix != nil && prefix != ""
+      self.use_root(prefix)
+    elif prefix != nil
+      http.get("http://127.0.0.1/api/v1/device", / b2, st2 -> self.on_uid(b2, st2),
+               {'find': "\"uid\":\"", 'keep': 32})
+    end
+  end
+
+  def on_uid(b, st)
+    var uid = self.quoted(b, st, "\"uid\":\"")
+    if uid != nil && uid != "" self.use_root(uid) end
+  end
+
+  def use_root(prefix)
+    self.mqtt_root = prefix + "/dinorunner"
+    self.sent_mode = nil
+    if store.get("debug") log("Dino MQTT topics: " + self.mqtt_root + "/state, /event") end
+    self.report()
+  end
+
+  # Publishes the state when the mode, world or time of day changes: a handful of
+  # messages a minute, never one per frame. Nothing is sent without a broker.
+  def report()
+    var mode = self.active ? self.mode : "off"
+    if mode == "run" && self.tour mode = "tour"
+    elif mode == "controls" || mode == "scores" mode = "menu"
+    elif mode == "initials" mode = "results"
+    end
+    var w = self.next_world
+    var odd = self.stage % 2 == 1
+    if mode == self.sent_mode && w == self.sent_world && odd == self.sent_odd return end
+    self.sent_mode = mode
+    self.sent_world = w
+    self.sent_odd = odd
+    var night = odd && self.has_night[w]
+    # The room lights follow the game from the countdown to the end of the match,
+    # including a pause and the second player's turn; enter and leave mark the
+    # moments to save and restore the room's own lighting.
+    var game = mode == "countdown" || mode == "run" || mode == "tour" || mode == "pause" ||
+               (mode == "ready" && self.turn == 1)
+    var state = {"mode": mode, "room": game ? "game" : "normal", "world": w + 1,
+                 "phase": odd ? (night ? "night" : "late") : "day",
+                 "dark": odd || !self.has_night[w],
+                 "color": format("#%06X", self.moods[night ? 10 : w])}
+    if mode == "results" state["score"] = self.score end
+    if game != self.sent_game state[game ? "enter" : "leave"] = true end
+    self.sent_game = game
+    mqtt.publish(self.mqtt_root + "/state", json.dump(state))
+  end
+
+  def report_event(name)
+    mqtt.publish(self.mqtt_root + "/event", json.dump({"event": name}))
   end
 
   def duration()
@@ -232,6 +311,7 @@ class DinoRunner
 
   def on_show()
     self.active = true
+    self.sent_mode = nil
     self.last = now_ms()
     self.gated = true
     # A countdown counts wall time, so restart it rather than letting it expire unseen.
@@ -254,6 +334,7 @@ class DinoRunner
     gamepad.release(self, 1)
     gamepad.release(self, 2)
     rotation.resume()
+    self.report()
   end
 
   def random(n)
@@ -587,6 +668,7 @@ class DinoRunner
 
   def step()
     if !self.active return end
+    self.report()
     var ms = now_ms()
     var elapsed = clamp(ms - self.last, 0, 100)
     self.last = ms
@@ -776,6 +858,9 @@ class DinoRunner
   end
 
   def play_event(name)
+    if name == "over" self.report_event("crash")
+    elif name == "record" || name == "roar" self.report_event(name)
+    end
     if !self.audio || self.tour return end
     try
       sound.effect(self.tunes[name])
