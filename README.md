@@ -57,7 +57,7 @@ Open the game’s settings on the web UI’s **Apps** tab.
 | Group | Settings |
 |---|---|
 | Players | P1 / solo dino colour, default `#3399FF`; P2 colour, default `#FF3355` |
-| Worlds | Auto/fixed world, fixed world 1–10, scrolling scenery, parallax intensity, ambient effects and density |
+| Worlds | Auto/fixed world, fixed world 1–10, scrolling scenery (0% keeps it still), ambient effects and density |
 | Worlds | Grassland daylight tint |
 | Sound | Game sounds and volume |
 | Scores | Reset high scores, applied once on the next launch |

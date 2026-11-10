@@ -1,12 +1,13 @@
 # @name Dino Runner
 # @desc Turn-based dinosaur runner with ten pixel worlds
+# @author RumbleInTheJungle
 # @version 2026.11.0
 # @display 52x16
 # @ondemand
+# @needs gamepad
 # @config world_mode select "World mode" options=auto,fixed default=auto group="Worlds"
 # @config fixed_world select "Fixed world" options=1,2,3,4,5,6,7,8,9,10 default=1 group="Worlds" help="1 Grassland, 2 Desert, 3 Jungle, 4 City, 5 Ice, 6 Volcano, 7 Moon, 8 Storm, 9 Crystal, 10 Matrix"
-# @config parallax_enabled bool "Scrolling scenery" default=true group="Worlds"
-# @config parallax_intensity slider "Parallax intensity" default=100 min=0 max=100 unit=% group="Worlds"
+# @config parallax_intensity slider "Scrolling scenery" default=100 min=0 max=100 unit=% group="Worlds" help="0% keeps the scenery still"
 # @config ambient_effects bool "Ambient effects" default=true group="Worlds"
 # @config ambient_density slider "Ambient effect density" default=25 min=0 max=100 unit=% group="Worlds"
 # @config p2_color color "P2 dino color" default=#FF3355 group="Players"
@@ -42,10 +43,11 @@ class DinoRunner
   var previous, up_previous, dx_previous, pad_names, local_pressed, scene_ms
 
   var worlds, world, next_world, old_colors, colors, transition_at, hills
-  var parallax, parallax_intensity, ambient, density, fixed_world, world_auto
+  var parallax_intensity, ambient, density, fixed_world, world_auto
   var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
   var shades, shade_phase, rain_ramps, player_colors, layer_floor
   var countdown_beat, big_digits, egg_rows, egg_cracks, shell_bits, roar_font, roar_pending
+  var dim_shades, dim_source, player_labels
   var bit_a, bit_b, bit_start, bit_select
 
   def init()
@@ -83,6 +85,9 @@ class DinoRunner
     self.countdown_at = 0
     self.countdown_beat = -1
     self.roar_pending = false
+    self.dim_shades = []
+    self.dim_source = nil
+    self.player_labels = ["P1", "P2"]
     # 7x10 countdown digits (index = digit); each row is a seven-bit mask.
     self.big_digits = [nil,
       [12,28,60,12,12,12,12,12,12,63],
@@ -142,7 +147,7 @@ class DinoRunner
     self.matrix = false
     self.build_rain_ramps()
     # Settings and button masks are fixed for the session; read them once, not per frame.
-    self.player_colors = [store.get("dino_color", 0x3399FF), store.get("p2_color", 0xFF3355)]
+    self.player_colors = [store.get("dino_color"), store.get("p2_color")]
     self.bit_a = gamepad.bit("A")
     self.bit_b = gamepad.bit("B")
     self.bit_start = gamepad.bit("START")
@@ -185,7 +190,7 @@ class DinoRunner
         end
       end
     end
-    if store.get("reset_best", false)
+    if store.get("reset_best")
       self.board = []
       store.set("leaderboard", [])
       store.set("reset_best", false)
@@ -666,7 +671,7 @@ class DinoRunner
       self.stage += 1
       # Starting-speed limits do not cap speed earned during a run.
       self.speed *= 1.0 + self.difficulty / 100.0
-      if store.get("debug", false) log(format("Dino stage %d: %.2f px/s", self.stage, self.speed)) end
+      if store.get("debug") log(format("Dino stage %d: %.2f px/s", self.stage, self.speed)) end
       self.palette()
       self.play_event("switch")
     end
@@ -881,12 +886,11 @@ class DinoRunner
     self.old_colors = self.worlds[0]
     self.colors = self.worlds[0]
     self.transition_at = -1000
-    self.parallax = store.get("parallax_enabled", true)
     self.parallax_intensity = clamp(num(store.get("parallax_intensity"),100),0,100)/100.0
-    self.ambient = store.get("ambient_effects", true)
+    self.ambient = store.get("ambient_effects")
     self.density = int(clamp(num(store.get("ambient_density"),25),0,100))
     self.fixed_world = int(clamp(num(store.get("fixed_world"),1),1,10))-1
-    self.world_auto = store.get("world_mode", "auto") == "auto"
+    self.world_auto = store.get("world_mode") == "auto"
     # Seeded once, bounded, and independent of obstacle RNG.
     self.drops = []
     for x : 0..width()-1
@@ -976,7 +980,7 @@ class DinoRunner
   end
 
   def offset(rate)
-    return self.parallax ? round(self.distance*rate*self.parallax_intensity) : 0
+    return round(self.distance*rate*self.parallax_intensity)
   end
 
   def scenery()
@@ -1448,8 +1452,14 @@ class DinoRunner
     var full = self.shades
     var bg = self.bg
     var ground = self.ground
-    var dimmed = []
-    for c : full dimmed.push(self.blend(0, c, 0.55)) end
+    # Dimmed colours are built once per palette, not on every frame.
+    if self.dim_source != full
+      var dimmed = []
+      for c : full dimmed.push(self.blend(0, c, 0.55)) end
+      self.dim_shades = dimmed
+      self.dim_source = full
+    end
+    var dimmed = self.dim_shades
     self.shades = dimmed
     self.bg = dimmed[0]
     self.ground = dimmed[4]
@@ -1462,7 +1472,7 @@ class DinoRunner
     self.draw_egg(beat, elapsed, within)
     # Big centred digit: gold as each beat lands, then white, with a dark outline.
     self.big_digit(3 - beat, 22, 3, within < 150 ? self.gold : 0xE8F0FF, dimmed[0])
-    self.small_text("P" + str(self.logical + 1), 0, 0, self.player_color(self.logical))
+    self.small_text(self.player_labels[self.logical], 0, 0, self.player_color(self.logical))
   end
 
   def big_digit(n, x, y, color, outline)
