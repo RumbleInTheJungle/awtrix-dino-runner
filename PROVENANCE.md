@@ -7,4 +7,4 @@
 
 - The MP3s in `sounds/` (the roar and three eggshell cracks) are synthesised from scratch by `tools/make_sounds.py` for this project. They use no recordings, samples or speech voices.
 
-No new distribution license has been selected for this standalone project. This file does not grant a license or change any existing rights.
+Dino Runner is licensed under the PolyForm Noncommercial License 1.0.0; see [LICENSE.md](LICENSE.md). AWTRIX NG and its vendored Berry interpreter are not part of this repository and keep their own licenses.

@@ -16,6 +16,8 @@
 # @config daylight color "Daylight color" default=#181E14 group="Worlds"
 # @config sounds bool "Game sounds" default=true group="Sound"
 # @config sound_volume slider "Game sound volume (0–100%)" default=60 min=0 max=100 unit=% group="Sound"
+# Required Notice: Copyright © 2026 Thomas Stalder (RumbleInTheJungle) https://github.com/RumbleInTheJungle/awtrix-dino-runner
+# License: PolyForm Noncommercial 1.0.0 https://polyformproject.org/licenses/noncommercial/1.0.0
 # Native AWTRIX NG TC002 on-demand game, 52x16. No server or MQTT required.
 # Active player: A jump/start/retry, B or D-pad down duck, START pause,
 # SELECT quit. Clock: select jump/retry, right hold duck, left pause.
