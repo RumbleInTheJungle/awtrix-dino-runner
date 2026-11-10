@@ -1,6 +1,6 @@
 # @name Dino Runner
 # @desc Turn-based dinosaur runner with ten pixel worlds
-# @version 0.2.0
+# @version 2026.11.0
 # @display 52x16
 # @ondemand
 # @config world_mode select "World mode" options=auto,fixed default=auto group="Worlds"
