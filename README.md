@@ -22,7 +22,7 @@ For an existing installation, use the installer below to preserve an enabled old
 python3 tools/install.py http://YOUR-CLOCK-IP --name YOUR-EXISTING-SCRIPT-NAME
 ```
 
-The installer backs up existing source and settings into the ignored `backups/` folder before updating. Use the device’s normal backup feature if you also want a full data backup. The new leaderboard starts empty on its first launch.
+The installer backs up existing source and settings into the ignored `backups/` folder before updating. It also uploads the hatching roar, [sounds/roar.mp3](sounds/roar.mp3), into the script's folder, skipping it when the clock already holds the same file. A hand-pasted script has no MP3 and plays a synthesised roar instead. Use the device’s normal backup feature if you also want a full data backup. The new leaderboard starts empty on its first launch.
 
 ## Controls
 
@@ -75,6 +75,7 @@ Use macOS or Linux with Python 3 and a C compiler. Supply a local AWTRIX NG chec
 python3 tools/build_host.py ../awtrix-ng
 python3 -m unittest discover -s tests -v
 python3 tools/render_previews.py
+python3 tools/make_roar.py   # regenerates sounds/roar.mp3; needs the lame encoder
 ```
 
 The tests run the actual Berry game against device-service mocks. The host links the AWTRIX checkout’s Berry VM; it does not copy firmware sources into this repository. Preview PNGs are generated from the game renderer at 52×16, then enlarged without smoothing. See [Verification](docs/developers/verification.md) for measurements and outstanding TC002 checks.

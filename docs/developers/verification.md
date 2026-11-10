@@ -14,7 +14,7 @@ The host compiles the checkout’s actual Berry interpreter with its existing co
 
 ## Results on 2026-11-09
 
-All 17 Python test groups pass. The session suite inside them passes 113 Berry assertions. Checks cover:
+All 20 Python test groups pass. The session suite inside them passes 113 Berry assertions. Checks cover:
 
 - Fixed rules, on-demand metadata, no idle takeover, quiet default logs and optional debug messages.
 - Clock controls, shared and separate controllers, neutral input gates, held countdown buttons and direction edges.
@@ -23,6 +23,8 @@ All 17 Python test groups pass. The session suite inside them passes 113 Berry a
 - Pausing a run and restarting a countdown when the game is hidden, with held clock buttons cleared.
 - Initials, the results fanfare only for a new number one, stable score ties, the five-record cutoff, persistence reconstruction, reset, fresh-score migration and invalid stored rows.
 - Matrix selection migration, installer backups, device-reported compile errors and fresh installation.
+- Script sound upload only when the clock lacks the file or holds a different checksum, and a small shipped MP3.
+- The egg countdown: a fresh world behind it, one crack per beat, the roar at the start, the same course afterwards and a run unaffected by the hatching overlay.
 - A minimum LED level for far, mid, near and soil colours in every world except Matrix, with far ≤ mid ≤ near and decoration below hazard brightness by day and night.
 - All ten worlds, day/night variants, P1/P2 colours, green Matrix dinos, renderer isolation from obstacle RNG, and exact paused-frame equality.
 - Reduced ambient-effect work after sustained slow draws, no reaction to isolated spikes, step-by-step recovery and no adjustment while paused.

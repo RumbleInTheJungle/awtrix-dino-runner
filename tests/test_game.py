@@ -1,4 +1,5 @@
 """Behaviour and regression tests run inside the actual vendored Berry VM."""
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -216,6 +217,34 @@ game.fixed_world=9 game.stage=0 game.palette()
 if game.colors[1]!=0x001307 raise "test","matrix exempt" end
 ''')
 
+    def test_egg_countdown_cracks_hatches_and_roars(self):
+        run(SCRIPT, '''
+import json
+var played=[]
+game.audio=true
+sound.effect=def(tune) for k:game.tunes.keys() if game.tunes[k]==tune played.push(k) end end end
+def tick(ms) clock_ms+=ms game.step() end
+game.setup() game.on_show()
+game.multiplayer=false game.new_match(false)
+# A finished previous run must not show behind the countdown.
+game.distance=1234.0 game.stage=3
+game.action("a",0)
+if game.mode!="countdown" || game.distance!=0.0 || game.stage!=0 raise "test","fresh world behind countdown" end
+var course=json.dump(game.obstacles)
+game.draw()
+var t0=clock_ms
+while clock_ms-t0<2975 tick(25) game.draw() end
+if game.mode!="countdown" raise "test","still counting" end
+var cracks=0 for p:played if p=="crack" cracks+=1 end end
+if cracks!=3 || played.find("roar")!=nil raise "test","one crack per beat: "+str(played) end
+tick(25)
+if game.mode!="run" || played[-1]!="roar" raise "test","roar at the start" end
+if json.dump(game.obstacles)!=course raise "test","same course after countdown" end
+# The hatch is only an overlay: physics continues normally beneath it.
+for i:0..27 tick(25) game.draw() end
+if game.mode!="run" || game.y!=0.0 || game.score<20 raise "test","hatch does not affect the run" end
+''')
+
     def test_audio_failure_warns_once(self):
         run(SCRIPT, '''
 game.audio=true
@@ -292,6 +321,34 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue(install.install('http://clock','dino',pathlib.Path(d),send))
             self.assertEqual((pathlib.Path(d)/'dino.be').read_text(),'original source')
         self.assertEqual(json.loads(calls[-1][2]),{'world_mode':'fixed','fixed_world':'10'})
+
+    def test_sounds_upload_only_when_changed(self):
+        calls=[]
+        with tempfile.TemporaryDirectory() as d:
+            sounds=pathlib.Path(d)
+            (sounds/'roar.mp3').write_bytes(b'ID3fake-mp3')
+            same=hashlib.sha256(b'ID3fake-mp3').hexdigest()
+            def send(base,path,method='GET',body=None,content_type='application/json'):
+                calls.append((path,method,content_type,body))
+                if method=='GET':
+                    return {'files':[{'name':'roar.mp3','sha256':held}]}
+                return {'ok':True}
+            held='0'*64
+            self.assertEqual(install.sync_sounds('http://clock/','dino',send,sounds),['roar.mp3'])
+            path,method,content_type,body=calls[-1]
+            self.assertEqual((path,method),('/api/v1/apps/script/dino/sounds','POST'))
+            self.assertTrue(content_type.startswith('multipart/form-data; boundary='))
+            self.assertIn(b'filename="roar.mp3"',body)
+            self.assertIn(b'ID3fake-mp3',body)
+            held=same
+            calls.clear()
+            self.assertEqual(install.sync_sounds('http://clock','dino',send,sounds),[])
+            self.assertEqual([c[1] for c in calls],['GET'])
+
+    def test_shipped_roar_is_a_small_mp3(self):
+        data=(ROOT/'sounds'/'roar.mp3').read_bytes()
+        self.assertLess(len(data),16384)
+        self.assertTrue(data[:3]==b'ID3' or (data[0]==0xFF and data[1]&0xE0==0xE0))
 
     def test_new_install_and_device_error(self):
         def missing(base,path,method='GET',body=None,content_type='application/json'):

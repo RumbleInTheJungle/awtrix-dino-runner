@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Install/update Dino Runner, preserving an existing Matrix selection."""
+"""Install/update Dino Runner, preserving an existing Matrix selection, and upload its sounds."""
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -9,6 +10,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+SOUNDS = ROOT / 'sounds'
 
 def request(base, path, method='GET', body=None, content_type='application/json'):
     data = body.encode() if isinstance(body, str) else body
@@ -49,6 +51,36 @@ def install(base, name, backup_dir, send=request):
         check_answer(answer)
     return old_matrix
 
+def multipart(filename, data):
+    """A multipart/form-data body with one file field, and its content type."""
+    boundary = 'dino-' + hashlib.sha256(data).hexdigest()[:24]
+    body = (f'--{boundary}\r\n'
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            'Content-Type: audio/mpeg\r\n\r\n').encode() + data + f'\r\n--{boundary}--\r\n'.encode()
+    return body, 'multipart/form-data; boundary=' + boundary
+
+def sync_sounds(base, name, send=request, sounds_dir=SOUNDS):
+    """Upload the script's MP3s that the clock does not already hold unchanged.
+
+    The script must be installed first. Returns the names of the uploaded files.
+    """
+    base = base.rstrip('/')
+    files = sorted(sounds_dir.glob('*.mp3'))
+    if not files:
+        return []
+    path = '/api/v1/apps/script/' + name + '/sounds'
+    listing = send(base, path)
+    held = {f.get('name'): f.get('sha256') for f in listing.get('files', [])}
+    uploaded = []
+    for file in files:
+        data = file.read_bytes()
+        if held.get(file.name) == hashlib.sha256(data).hexdigest():
+            continue
+        body, content_type = multipart(file.name, data)
+        check_answer(send(base, path, 'POST', body, content_type))
+        uploaded.append(file.name)
+    return uploaded
+
 def check_answer(answer):
     if not isinstance(answer, dict) or answer.get('ok') is not True or answer.get('error'):
         raise RuntimeError('Device did not confirm a successful update: ' + str(answer))
@@ -60,7 +92,10 @@ def main():
     p.add_argument('--backup-dir', type=pathlib.Path, default=ROOT/'backups')
     a = p.parse_args()
     migrated = install(a.device, a.name, a.backup_dir)
+    uploaded = sync_sounds(a.device, a.name)
     print('Installed. Open the device menu → Scripts → Dino Runner.')
+    if uploaded:
+        print('Uploaded sounds: ' + ', '.join(uploaded))
     if migrated:
         print('Preserved Matrix mode as fixed world 10.')
 

@@ -5,4 +5,6 @@
 - The adopted graphics specification is `docs/WORLDS.md`. Matrix player colours, fixed gameplay, on-demand launch and multiplayer follow that specification and the owner’s explicit decisions.
 - The verification host builds against a separately supplied [AWTRIX NG](https://github.com/Blueforcer/awtrix-ng) checkout. AWTRIX NG identifies its license as PolyForm Noncommercial 1.0.0. The vendored Berry interpreter has its own license at `lib/berry/LICENSE` in that checkout. Neither dependency is vendored here.
 
+- `sounds/roar.mp3` is synthesised from scratch by `tools/make_roar.py` for this project. It uses no recordings, samples or speech voices.
+
 No new distribution license has been selected for this standalone project. This file does not grant a license or change any existing rights.
