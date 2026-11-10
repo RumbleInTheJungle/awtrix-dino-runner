@@ -6,7 +6,11 @@ This is the adopted graphics specification for Dino Runner’s 52×16 display.
 
 The original dino’s shape, size, running and jumping animation, position and collision behaviour remain unchanged. P1 and solo default to blue `#3399FF`; P2 defaults to `#FF3355`. In Matrix, both players are green and the ready labels identify their turns.
 
-Auto mode visits worlds 1–10 in order, repeating after Matrix. Worlds change every 1,000 pixels. Fixed mode keeps a favourite world. Day/night milestones remain every 500 pixels, with one compounded 5% speed increase and the existing milestone sound. Permanent night and cavern themes keep their visual identity.
+Auto mode visits worlds 1–10 in order, repeating after Matrix. Worlds change every 1,000 pixels. Fixed mode keeps a favourite world. Day/night milestones remain every 500 pixels, with one compounded 5% speed increase and the existing milestone sound.
+
+Grassland, desert, jungle, snow and moon base turn to a moonlit night on every second milestone. Scenery shifts to a darker blue-grey with a lower LED floor (far 40, mid 50, near 64, soil 40), the sky goes nearly black, stars and a moon appear, and hazards keep their daylight colours. Within one world, day and night fade over 1.5 seconds with an orange dusk or pink dawn band over the horizon; the moon base has no band. A change of world keeps the half-second fade.
+
+Permanent night and cavern themes keep their scenery and shift into a subtler late phase: the sky darkens, Neon City dims its windows, turns every other one off and lets a sign drop out now and then, lava cools, storm clouds grow heavier with lightning twice as often, crystals glow less and Matrix terminals dim while the rain thins to half its columns.
 
 Far scenery scrolls at 4% of gameplay speed, mid scenery at 10% and near details at 24%, scaled by the parallax intensity setting. Patterns wrap without an empty edge. Sparse ambient effects use their own animation time. Pausing freezes everything.
 
@@ -22,7 +26,7 @@ The original poster is concept art. Actual graphics use small pixel patterns, si
 
 **Near and ground:** a green running edge over brown earth, with sparse tufts, flowers and stones. **Obstacle direction:** rocks, stumps or solid bushes, using the original silhouettes where needed to preserve readable timing. Airborne hazards remain recognisable.
 
-**Animation:** drifting clouds and occasional one-pixel grass movement. Night darkens the scene and adds restrained stars.
+**Animation:** drifting clouds and occasional one-pixel grass movement. Night darkens the scene, turns the sun into a moon and adds restrained stars.
 
 ## 2. Desert Dunes
 
@@ -42,7 +46,7 @@ The original poster is concept art. Actual graphics use small pixel patterns, si
 
 **Near and ground:** mossy stone, small ferns, roots and masonry. **Obstacles:** stone blocks, broken columns and roots.
 
-**Animation:** a leaf or vine shifts one pixel every few seconds. Decoration never draws over the dino.
+**Animation:** a leaf or vine shifts one pixel every few seconds; at night, fireflies blink between the trees. Decoration never draws over the dino.
 
 ## 4. Neon City Night
 
@@ -62,7 +66,7 @@ The original poster is concept art. Actual graphics use small pixel patterns, si
 
 **Near and ground:** a snow-white running edge over blue ice, with small snow piles and reflections. **Obstacles:** ice blocks, frozen rocks and crystal-like forms within the existing hitboxes.
 
-**Animation:** sparse drifting snow and occasional glints. Snow never becomes dense enough to hide hazards.
+**Animation:** sparse drifting snow and occasional glints; stars and a crescent moon at night. Snow never becomes dense enough to hide hazards.
 
 ## 6. Volcano / Lava Cavern
 

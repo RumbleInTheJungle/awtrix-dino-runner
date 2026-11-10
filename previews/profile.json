@@ -5,72 +5,72 @@
     {
       "world": 1,
       "name": "Grassland",
-      "peak_draw_instructions": 5791,
-      "mean_draw_us_host": 116.18,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 5794,
+      "mean_draw_us_host": 139.68833333333333,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 2,
       "name": "Desert",
-      "peak_draw_instructions": 5673,
-      "mean_draw_us_host": 113.03333333333333,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 5680,
+      "mean_draw_us_host": 114.51,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 3,
       "name": "Jungle",
-      "peak_draw_instructions": 6076,
-      "mean_draw_us_host": 113.25666666666666,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 6087,
+      "mean_draw_us_host": 116.45333333333333,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 4,
       "name": "Neon City",
-      "peak_draw_instructions": 7620,
-      "mean_draw_us_host": 120.56833333333333,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 7735,
+      "mean_draw_us_host": 124.02333333333333,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 5,
       "name": "Snow Ice",
-      "peak_draw_instructions": 6032,
-      "mean_draw_us_host": 114.255,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 5948,
+      "mean_draw_us_host": 115.03666666666666,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 6,
       "name": "Volcano",
-      "peak_draw_instructions": 6528,
-      "mean_draw_us_host": 120.67166666666667,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 6535,
+      "mean_draw_us_host": 117.72333333333333,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 7,
       "name": "Moon Base",
-      "peak_draw_instructions": 5927,
-      "mean_draw_us_host": 119.84166666666667,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 5975,
+      "mean_draw_us_host": 117.71166666666667,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 8,
       "name": "Storm Night",
-      "peak_draw_instructions": 6674,
-      "mean_draw_us_host": 115.67333333333333,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 6683,
+      "mean_draw_us_host": 119.51833333333333,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 9,
       "name": "Crystal",
-      "peak_draw_instructions": 6652,
-      "mean_draw_us_host": 115.96,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 6662,
+      "mean_draw_us_host": 117.865,
+      "vm_heap_bytes_after_gc": 127501
     },
     {
       "world": 10,
       "name": "Matrix",
-      "peak_draw_instructions": 7841,
-      "mean_draw_us_host": 139.06,
-      "vm_heap_bytes_after_gc": 107935
+      "peak_draw_instructions": 7850,
+      "mean_draw_us_host": 145.43333333333334,
+      "vm_heap_bytes_after_gc": 127501
     }
   ]
 }

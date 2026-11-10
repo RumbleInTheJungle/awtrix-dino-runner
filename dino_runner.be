@@ -46,6 +46,7 @@ class DinoRunner
   var parallax_intensity, ambient, density, fixed_world, world_auto
   var font, fx_budget, fx_strain, fx_calm, bindings, left_pending, resume_countdown
   var shades, shade_phase, rain_ramps, player_colors, layer_floor
+  var night_floor, has_night, fade_ms, glow, horizon, tour, tour_auto
   var countdown_beat, big_digits, egg_rows, egg_cracks, shell_bits, roar_font, roar_pending
   var dim_shades, dim_source, player_labels
   var bit_a, bit_b, bit_start, bit_select
@@ -61,6 +62,7 @@ class DinoRunner
       "Y":[5,5,2,2,2],"Z":[7,1,2,4,7],":":[0,2,0,2,0],"!":[2,2,2,0,2],
       "<":[1,2,4,2,1],">":[4,2,1,2,4]," ":[0,0,0,0,0]}
     self.mode = "menu"
+    self.tour = false
     self.multiplayer = store.get("last_multiplayer", false)
     self.separate = store.get("separate_controls", false)
     self.menu_index = self.multiplayer ? 1 : 0
@@ -295,14 +297,9 @@ class DinoRunner
     end
   end
 
-
-
-
-
-
-
   # Logical players never depend on the firmware's mutable input slot numbers.
   def menu()
+    self.end_tour()
     self.mode = "menu"
     self.local_jump = false
     self.local_duck = false
@@ -312,7 +309,32 @@ class DinoRunner
     self.accumulator = 0
   end
 
+  # World tour: an endless, unscored run through every world that changes
+  # between day and night (or the late phase) every five seconds, for checking
+  # the graphics on the panel. An autopilot jumps and ducks; nothing can end it.
+  def start_tour()
+    self.tour = true
+    self.tour_auto = self.world_auto
+    self.world_auto = true
+    self.multiplayer = false
+    self.logical = 0
+    self.player = 0
+    self.seed = now_ms() % 65521 + 1
+    self.start()
+    self.gated = true
+  end
+
+  def end_tour()
+    if !self.tour return end
+    self.tour = false
+    self.world_auto = self.tour_auto
+    self.stage = 0
+    self.distance = 0.0
+    self.palette()
+  end
+
   def quit()
+    self.end_tour()
     gamepad.release(self, 1)
     gamepad.release(self, 2)
     rotation.close()
@@ -412,10 +434,11 @@ class DinoRunner
   def action(key, slot)
     if key == "quit" self.quit() return end
     if self.mode == "menu"
-      if key == "left" self.menu_index = (self.menu_index + 3) % 4 end
-      if key == "right" self.menu_index = (self.menu_index + 1) % 4 end
+      if key == "left" self.menu_index = (self.menu_index + 4) % 5 end
+      if key == "right" self.menu_index = (self.menu_index + 1) % 5 end
       if key == "a"
-        if self.menu_index == 3 self.quit() return end
+        if self.menu_index == 4 self.quit() return end
+        if self.menu_index == 3 self.start_tour() return end
         if self.menu_index == 2
           self.mode = "scores"
           self.rank = 0
@@ -460,6 +483,9 @@ class DinoRunner
         self.countdown_beat = -1
         self.gated = true
       end
+    elif self.mode == "run" && self.tour
+      # Any button ends the tour; the D-pad does nothing.
+      if key != "left" && key != "right" self.menu() return end
     elif self.mode == "run"
       if key == "a" self.jump() end
       if key == "pause" self.pause() end
@@ -594,7 +620,7 @@ class DinoRunner
         var dx = dir == nil ? 0 : dir[0]
         var dy = dir == nil ? 0 : dir[1]
         var allowed = self.mode != "run" && self.mode != "countdown" && self.mode != "pause"
-        allowed = allowed || slot == self.player || self.recover
+        allowed = allowed || slot == self.player || self.recover || self.tour
         if allowed
           if (newly & self.bit_select) != 0 self.quit() return end
           if (newly & self.bit_start) != 0 self.action("pause", slot)
@@ -638,8 +664,8 @@ class DinoRunner
     var dir = self.player > 0 ? dirs[self.player - 1] : nil
     var up = dir != nil && dir[1] < 0
     var down = dir != nil && dir[1] > 0
-    self.jump_held = !self.gated && (self.local_jump || (buttons & self.bit_a) != 0 || up)
-    self.duck = !self.gated && self.y <= 0.0 && (self.local_duck || down || (buttons & self.bit_b) != 0)
+    self.jump_held = !self.tour && !self.gated && (self.local_jump || (buttons & self.bit_a) != 0 || up)
+    self.duck = !self.tour && !self.gated && self.y <= 0.0 && (self.local_duck || down || (buttons & self.bit_b) != 0)
     self.scene_ms += elapsed
     if self.roar_pending && self.scene_ms >= 250
       self.roar_pending = false
@@ -662,21 +688,22 @@ class DinoRunner
       self.score = points
       self.label = str(self.score)
     end
-    if !self.record_announced && self.score > self.record_target
+    if !self.tour && !self.record_announced && self.score > self.record_target
       self.record_announced = true
       self.play_event("record")
     end
-    var next_stage = self.score / self.switch_score
+    var next_stage = self.tour ? self.scene_ms / 5000 : self.score / self.switch_score
     while self.stage < next_stage
       self.stage += 1
       # Starting-speed limits do not cap speed earned during a run.
-      self.speed *= 1.0 + self.difficulty / 100.0
+      if !self.tour self.speed *= 1.0 + self.difficulty / 100.0 end
       if store.get("debug") log(format("Dino stage %d: %.2f px/s", self.stage, self.speed)) end
       self.palette()
       self.play_event("switch")
     end
     self.travel += speed * 0.025
     if self.travel >= 52.0 self.travel -= 52.0 end
+    if self.tour self.autopilot(speed) end
     if self.y <= 0.0 && self.jump_until > now_ms()
       self.launch()
       self.duck = false
@@ -729,15 +756,27 @@ class DinoRunner
       var ox = round(o[0])
       var oy = o[1] == 1 ? 8 : 14 - o[3]
       # Exclusive right/bottom edges: a shared edge is not a collision.
-      if 6 < ox + o[2] && 6 + pw > ox && py < oy + o[3] && py + ph > oy
+      if !self.tour && 6 < ox + o[2] && 6 + pw > ox && py < oy + o[3] && py + ph > oy
         self.finish_run()
         return
       end
     end
   end
 
+  def autopilot(speed)
+    self.duck = false
+    for o : self.obstacles
+      var gap = o[0] - 11.0
+      if o[1] != 1 && gap > -5 && gap < speed * 0.65 && self.y <= 0.0
+        self.launch()
+      elif o[1] == 1 && o[0] < 26 && o[0] + 5 > 5 && self.y <= 0.0
+        self.duck = true
+      end
+    end
+  end
+
   def play_event(name)
-    if !self.audio return end
+    if !self.audio || self.tour return end
     try
       sound.effect(self.tunes[name])
     except .. as err, msg
@@ -835,6 +874,8 @@ class DinoRunner
 
   def rain_draw()
     var stride = max(1, 101 / max(1, min(self.density, self.fx_budget)))
+    # The late phase thins the rain to half its columns.
+    if self.stage%2 == 1 stride *= 2 end
     var columns = width()
     # Rows 14-15 are always covered by the ground drawn afterwards.
     var bottom = 13
@@ -880,6 +921,14 @@ class DinoRunner
     # Minimum peak channel per palette index (far 56, mid 72, near 92, soil 56):
     # about 4, 6 and 9 LED levels at 25% panel brightness.
     self.layer_floor = [0, 56, 72, 92, 0, 56]
+    # Night keeps a lower floor so the moonlit scenery is visibly darker, yet still
+    # lit at about 2, 3 and 4 LED levels at 25% panel brightness.
+    self.night_floor = [0, 40, 50, 64, 0, 40]
+    # Grassland, desert, jungle, snow and moon base turn to night on odd stages; the
+    # permanent night and cavern worlds shift into a subtler late phase instead.
+    self.has_night = [true, true, true, false, true, false, true, false, false, false]
+    self.fade_ms = 500.0
+    self.glow = 0
     self.hills = [0,0,1,1,2,3,3,4,4,3,2,2,1,0,0,1,2,3,3,2,1,1,0,0,1,0]
     self.world = 0
     self.next_world = 0
@@ -915,23 +964,60 @@ class DinoRunner
     return rgb(int(r * f + 0.5), int(g * f + 0.5), int(b * f + 0.5))
   end
 
+  # Moonlight: shift a colour towards a cool blue-grey of the same lightness, then
+  # darken it. The LED floor applied afterwards keeps the blue cast.
+  def moonlit(c, keep)
+    var r = (c >> 16) & 255
+    var g = (c >> 8) & 255
+    var b = c & 255
+    var l = (r * 3 + g * 6 + b) / 10.0 * 0.65
+    return rgb(int((r * 0.35 + l * 0.70) * keep), int((g * 0.35 + l * 0.90) * keep),
+      int(min(255.0, (b * 0.35 + l * 1.60) * keep)))
+  end
+
+  def night_color(w, i, c)
+    if i == 0 return self.blend(0x000206, c, 0.30) end
+    # Hazards keep their daylight brightness, so night never makes a run harder.
+    if i == 6 || i == 7 return c end
+    # The sun of grassland and desert becomes a pale moon.
+    if i == 8 && (w == 0 || w == 1) return 0xA8B4C8 end
+    # Stars and the moon base's station lights stay bright.
+    if (i == 9 && (w == 0 || w == 6)) || (i == 11 && (w == 4 || w == 6)) return c end
+    return self.moonlit(c, i == 4 ? 0.60 : 0.55)
+  end
+
+  def late_color(w, i, c)
+    if i == 0 return self.blend(0, c, 0.60) end
+    if w == 3 && (i == 9 || i == 10) return self.blend(0, c, 0.70) end    # windows dim
+    if w == 5 && i >= 8 && i <= 10 return self.blend(0x400404, c, 0.40) end # lava cools
+    if w == 7 && (i == 10 || i == 11) return self.blend(0, c, 0.60) end   # heavier clouds
+    if w == 8 && i >= 9 return self.blend(0, c, 0.40) end                 # crystals dim
+    if w == 9 && (i == 9 || i == 10) return self.blend(0, c, 0.55) end    # terminals dim
+    return c
+  end
+
   def palette()
     var desired = self.world_auto ? (self.stage / 2) % 10 : self.fixed_world
     var target = self.worlds[desired]
+    var odd = self.stage % 2 == 1
+    var night = odd && self.has_night[desired]
     var next = []
-    # Permanent night/cavern worlds retain their identity at every milestone.
-    var night = self.stage % 2 == 1 && (desired == 0 || desired == 1 || desired == 2 || desired == 4 || desired == 6)
-    for c : target
-      next.push(night ? self.blend(0x000008,c,0.60) : c)
+    for i : 0 .. 11
+      var c = target[i]
+      if night c = self.night_color(desired, i, c)
+      elif odd c = self.late_color(desired, i, c)
+      end
+      next.push(c)
     end
-    if desired == 0 && self.stage % 2 == 0 next[0] = self.blend(next[0],self.day_color,0.35) end
+    if desired == 0 && !odd next[0] = self.blend(next[0],self.day_color,0.35) end
     # LED floor: the firmware applies gamma 1.9 before scaling by panel brightness, so
     # very dark channels round to zero at reduced brightness. Lift far, mid, near and
     # soil to a minimum peak channel, keeping their hue and the far < mid < near order.
     # Matrix is exempt: its black backdrop keeps the code rain readable.
     if desired != 9
+      var floors = night ? self.night_floor : self.layer_floor
       for i : 1 .. 5
-        var floor = self.layer_floor[i]
+        var floor = floors[i]
         if floor > 0 next[i] = self.lift(next[i], floor) end
       end
     end
@@ -941,7 +1027,14 @@ class DinoRunner
       self.world = desired
       self.next_world = desired
       self.transition_at = -1000
+      self.fade_ms = 500.0
+      self.glow = 0
     else
+      # Day and night fade slowly in the same world, with an orange dusk or a pink
+      # dawn passing over the sky; a change of world keeps its quick cross-fade.
+      var same = desired == self.next_world
+      self.fade_ms = same ? 1500.0 : 500.0
+      self.glow = (same && self.has_night[desired] && desired != 6) ? (night ? 1 : -1) : 0
       self.old_colors = self.colors
       self.colors = next
       self.next_world = desired
@@ -952,7 +1045,7 @@ class DinoRunner
   end
 
   def apply_palette()
-    var phase = clamp((self.scene_ms-self.transition_at)/500.0,0.0,1.0)
+    var phase = clamp((self.scene_ms-self.transition_at)/self.fade_ms,0.0,1.0)
     if phase >= 0.5 self.world = self.next_world end
     self.matrix = self.world == 9
     # Blend the twelve world colours only when the transition phase moves; outside a
@@ -962,6 +1055,15 @@ class DinoRunner
       var shades = []
       for i : 0 .. 11 shades.push(self.blend(self.old_colors[i],self.colors[i],phase)) end
       self.shades = shades
+      # Dusk or dawn: a warm band over the horizon, strongest halfway through.
+      self.horizon = nil
+      if self.glow != 0 && phase < 1.0
+        var g = (phase < 0.5 ? phase : 1.0 - phase) * 2.0
+        var warm = self.glow > 0 ? 0xB0420C : 0x9A4070
+        var band = []
+        for y : 0 .. 5 band.push(self.blend(shades[0], warm, g * (y + 1) / 7.0)) end
+        self.horizon = band
+      end
     end
     self.bg = self.shades[0]
     self.ground = self.shades[4]
@@ -997,6 +1099,10 @@ class DinoRunner
     var n = self.offset(0.24)
     # Skyline family, decided once per frame rather than once per column.
     var kind = (w == 0 || w == 1 || w == 4 || w == 6 || w == 7) ? 0 : (w == 2 ? 1 : ((w == 3 || w == 9) ? 2 : 3))
+    var dark = self.stage%2 == 1
+    if self.horizon != nil
+      for y : 0 .. 5 line(0, y + 6, 51, y + 6, self.horizon[y]) end
+    end
     # Per-column strips wrap at 104 pixels, including all edge columns.
     for x : 0..51
       var a = (x+f)%104
@@ -1036,7 +1142,8 @@ class DinoRunner
             var yy = top+1
             while yy <= 12
               var lit = (bld*5+yy*3+col)%3
-              if lit == 0 pixel(x,yy,sig1)
+              # Late at night every other cyan window goes dark.
+              if lit == 0 && !(dark && (bld*3+yy/2+col/2)%2 == 0) pixel(x,yy,sig1)
               elif lit == 1 && bld%3 == 0 pixel(x,yy,sig2)
               end
               yy += 2
@@ -1048,7 +1155,8 @@ class DinoRunner
           line(x,mtop,x,13,mid)
           if b%4 == 0 pixel(x,10,near) end
           # Neon signs: vertical strips and rooftop bars on alternate buildings.
-          if w == 3
+          # Late at night every third sign briefly drops out about every three seconds.
+          if w == 3 && !(dark && (b/17)%3 == 1 && (self.scene_ms/120)%23 < 2)
             if (b/17)%2 == 0
               if b%17 == 5 line(x,mtop+1,x,mtop+3,sig3) end
             elif b%17 >= 2 && b%17 <= 4
@@ -1166,12 +1274,19 @@ class DinoRunner
       circle_fill(sky_x,7,1,accent)
       pixel(sky_x-1,7,sig2)
       pixel(sky_x,6,sig2)
+    elif w == 4 && dark
+      # Crescent moon over the snowfield at night.
+      pixel(sky_x,6,sig3)
+      pixel(sky_x-1,7,sig3)
+      pixel(sky_x,8,sig3)
     end
-    # Sparse fixed stars: moon base, snow, and grassland at night.
-    if w == 6 || w == 4 || (w == 0 && self.stage%2 == 1)
-      var star = w == 4 ? sig3 : sig1
-      for k : 0..3
-        pixel((k*29+11-f%104+104)%104,5+(k*2)%3,star)
+    # Sparse fixed stars: always over the moon base, and in the open-sky worlds at
+    # night. The moon base gets more of them at night.
+    if w == 6 || (dark && (w == 0 || w == 1 || w == 4))
+      var star = w == 4 ? sig3 : (w == 1 ? accent : sig1)
+      var stars = (dark && w != 1) ? 7 : 3
+      for k : 0..stars
+        pixel((k*29+11+(k/4)*14-f%104+104)%104,5+(k*2+k/4)%3,star)
       end
     end
     # Near-ground tufts. Their row-15 counterparts are drawn by draw() after the
@@ -1201,6 +1316,7 @@ class DinoRunner
     var color = self.shade(8)
     var near = self.shade(3)
     var w = self.world
+    var dark = self.stage%2 == 1
     for i : 0..count-1
       var x = (17+i*19+t/9)%52
       var y = 6+(t/4+i*3)%7
@@ -1214,7 +1330,11 @@ class DinoRunner
       elif w == 1
         if t%20 < 3 pixel(x,12,near) end
       elif w == 2
-        if t%30 < 10 pixel((i*23+t/30)%52,7+(t/5)%2,near) end
+        if dark
+          # Fireflies blink between the trees at night.
+          if (t+i*7)%20 < 6 pixel((i*23+t/12)%52,8+(t/7+i)%4,0xB8D850) end
+        elif t%30 < 10 pixel((i*23+t/30)%52,7+(t/5)%2,near)
+        end
       elif w == 3
         if t%40 < 8 pixel((i*17+31)%52,8,color) end
       elif w == 8
@@ -1236,9 +1356,11 @@ class DinoRunner
         if dy <= 13 pixel(dx,dy,self.shade(9)) end
       end
     end
-    if w == 7 && t%90 < 2
+    # The storm's late phase brings lightning twice as often.
+    var every = dark ? 45 : 90
+    if w == 7 && t%every < 2
       # A small distant lightning bolt; never a full-display flash.
-      var lx = 30+((t/90)%3)*7
+      var lx = 30+((t/every)%3)*7
       var bolt = self.shade(9)
       pixel(lx,6,bolt)
       pixel(lx-1,7,bolt)
@@ -1341,7 +1463,7 @@ class DinoRunner
     var title = "DINO"
     var detail = ""
     if self.mode == "menu"
-      var items = ["SOLO", "2 PLAYERS", "HIGH SCORE", "QUIT"]
+      var items = ["SOLO", "2 PLAYERS", "HIGH SCORE", "WORLDS", "QUIT"]
       title = items[self.menu_index]
       detail = "<  A:OK  >"
     elif self.mode == "controls"
@@ -1421,6 +1543,11 @@ class DinoRunner
     self.tiny_number(max(self.best, self.score), 4, self.gold)
     var shown = min(9999, self.score)
     self.tiny_number(shown, width() - size(str(shown)) * 4, self.fg)
+  end
+
+  def tour_hud()
+    var phase = self.stage % 2 == 0 ? "DAY" : (self.has_night[self.world] ? "NIGHT" : "LATE")
+    self.small_text("W" + str(self.world + 1) + " " + phase, 0, 0, self.gold)
   end
 
   def draw_ground()
@@ -1599,7 +1726,9 @@ class DinoRunner
     end
     # Hatching flourish over the first moments of a run; purely visual. The big
     # banner replaces the HUD while it shows, when the score is still near zero.
-    if self.scene_ms < 1750 && self.distance < 70.0
+    if self.tour
+      self.tour_hud()
+    elif self.scene_ms < 1750 && self.distance < 70.0
       self.draw_hatch()
     else
       self.hud()

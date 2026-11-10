@@ -50,6 +50,8 @@ Qualifying players enter three initials after both turns. Solo and multiplayer s
 
 The running HUD shows up to 9,999; final results and the leaderboard retain the full integer score.
 
+**Worlds** in the menu starts an endless tour for looking at the graphics: the dino runs on autopilot and cannot crash, and the scene changes every five seconds, from day to night (or the late phase) and on to the next world. The top left shows the world and phase, for example `W4 LATE`. The tour is silent and saves nothing. Any button except the D-pad returns to the menu.
+
 ## Settings
 
 Open the game’s settings on the web UI’s **Apps** tab.
@@ -65,7 +67,7 @@ Open the game’s settings on the web UI’s **Apps** tab.
 
 Matrix uses green dinos for both players. **P1 READY** and **P2 READY** identify turns. World names and detailed art direction are in [Worlds](docs/WORLDS.md).
 
-Gameplay rules are fixed: 30 px/s starting speed, 100% type and distance randomness using the original algorithms, a day/night change every 500 pixels and a compounded 5% speed increase at each change. Auto mode changes worlds every 1,000 pixels. Fixed mode keeps one world while speed and day/night milestones continue. World changes never increase speed a second time.
+Gameplay rules are fixed: 30 px/s starting speed, 100% type and distance randomness using the original algorithms, a day/night change every 500 pixels and a compounded 5% speed increase at each change. Five worlds turn to a moonlit night with a dusk fade; the five night and cavern worlds shift into a subtler late phase. Auto mode changes worlds every 1,000 pixels. Fixed mode keeps one world while speed and day/night milestones continue. World changes never increase speed a second time.
 
 ## Development and verification
 

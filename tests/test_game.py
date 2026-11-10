@@ -171,6 +171,47 @@ game.action("a",0)
 if game.mode!="run" raise "test","resume after return" end
 ''')
 
+    def test_world_tour_visits_every_world_without_ending(self):
+        run(SCRIPT, '''
+var played=[]
+game.audio=true
+sound.effect=def(tune) played.push(tune) end
+def tick(ms) clock_ms+=ms game.step() end
+game.setup() game.on_show()
+game.world_auto=false game.fixed_world=4
+var board=str(game.board) var best=game.best
+game.mode="menu" game.menu_index=2
+game.action("right",0)
+if game.menu_index!=3 raise "test","worlds entry" end
+game.draw()
+game.action("a",0)
+if !game.tour || game.mode!="run" || !game.world_auto raise "test","tour starts" end
+game.gated=false
+var speed=game.speed
+var seen={}
+for s:0..19
+  # One phase per five seconds: day, then night or the late phase, then the next world.
+  for i:0..199
+    tick(25)
+    if game.mode!="run" raise "test","tour never ends "+str(s) end
+  end
+  game.draw()
+  seen[str(game.stage/2%10)+"/"+str(game.stage%2)]=true
+end
+if size(seen)!=20 raise "test","all worlds day and night: "+str(size(seen)) end
+if game.speed!=speed raise "test","tour keeps its speed" end
+if size(played)!=0 raise "test","tour is silent" end
+if str(game.board)!=board || game.best!=best raise "test","tour saves nothing" end
+# A hidden tour pauses; B returns to the menu and restores the world setting.
+game.on_hide() game.on_show()
+if game.mode!="pause" raise "test","tour pauses when hidden" end
+game.action("a",0)
+if game.mode!="run" || !game.tour raise "test","tour resumes" end
+game.action("a",0)
+if game.mode!="menu" || game.tour || game.world_auto || game.fixed_world!=4 raise "test","tour ends on a button" end
+if game.stage!=0 raise "test","menu back on a fresh stage" end
+''')
+
     def test_results_fanfare_only_for_new_number_one(self):
         run(SCRIPT, '''
 var played=[]
@@ -205,8 +246,9 @@ for w:0..9
   for stage:0..1
     game.world_auto=false game.fixed_world=w game.stage=stage game.distance=0.0 game.palette()
     var c=game.colors
+    var fl=(stage==1 && game.has_night[w]) ? [0,40,50,64,0,40] : [0,56,72,92,0,56]
     if w!=9
-      if peak(c[1])<56 || peak(c[2])<72 || peak(c[3])<92 || peak(c[5])<56 raise "test","floor "+str(w) end
+      if peak(c[1])<fl[1] || peak(c[2])<fl[2] || peak(c[3])<fl[3] || peak(c[5])<fl[5] raise "test","floor "+str(w) end
     end
     if peak(c[1])>peak(c[2]) || peak(c[2])>peak(c[3]) raise "test","layer order "+str(w) end
     if peak(c[3])>=peak(c[6]) raise "test","decoration brighter than hazards "+str(w) end
@@ -215,6 +257,56 @@ end
 # Matrix keeps its original dark backdrop below the rain.
 game.fixed_world=9 game.stage=0 game.palette()
 if game.colors[1]!=0x001307 raise "test","matrix exempt" end
+''')
+
+    def test_night_is_distinct_and_fades_through_dusk(self):
+        run(SCRIPT, '''
+def peak(c) return max((c>>16)&255, max((c>>8)&255, c&255)) end
+def look(w, stage)
+  game.world_auto=false game.fixed_world=w game.stage=stage game.distance=0.0 game.palette()
+  return game.colors
+end
+for w:0..9
+  var day=look(w,0)
+  var late=look(w,1)
+  # Hazards and the dino never change with the time of day.
+  if day[6]!=late[6] || day[7]!=late[7] raise "test","hazards change "+str(w) end
+  if game.has_night[w]
+    # Moonlit scenery: far, mid and near visibly darker and blue-tinted.
+    for i:1..3
+      if peak(day[i])-peak(late[i])<12 raise "test","night too bright "+str(w)+"/"+str(i) end
+      if (late[i]&255)<((late[i]>>16)&255) raise "test","night not cool "+str(w)+"/"+str(i) end
+    end
+    # The moon base sky is already black by day.
+    if peak(late[0])>max(10,peak(day[0])/2) raise "test","night sky "+str(w) end
+  else
+    # Permanent night worlds keep their scenery and shift only accents and sky.
+    for i:1..5 if day[i]!=late[i] raise "test","late scenery "+str(w) end end
+    var moved=0
+    for i:8..11 if day[i]!=late[i] moved+=1 end end
+    if w!=9 && moved==0 raise "test","late phase invisible "+str(w) end
+  end
+end
+# Day to night in one world: a slow fade with a warm horizon band halfway.
+game.fixed_world=0 game.stage=0 game.distance=0.0 game.palette()
+game.distance=500.0 game.scene_ms=10000 game.stage=1 game.palette()
+if game.fade_ms!=1500.0 || game.glow!=1 raise "test","dusk fade" end
+game.scene_ms=10750 game.apply_palette()
+if game.horizon==nil || size(game.horizon)!=6 raise "test","dusk band" end
+game.scene_ms=11500 game.apply_palette()
+if game.horizon!=nil raise "test","band gone after fade" end
+# Back to day in the same world: dawn.
+game.distance=1000.0 game.stage=2 game.palette()
+if game.glow!=-1 raise "test","dawn" end
+# A change of world keeps the quick cross-fade and no band; the moon has no dusk.
+game.world_auto=true game.stage=2 game.palette()
+if game.fade_ms!=500.0 || game.glow!=0 raise "test","world change fade" end
+game.world_auto=false game.fixed_world=6 game.distance=0.0 game.stage=0 game.palette()
+game.distance=500.0 game.stage=1 game.palette()
+if game.glow!=0 raise "test","no dusk on the moon" end
+# The countdown starts on a settled day palette without a band.
+game.distance=0.0 game.stage=0 game.palette()
+if game.horizon!=nil || game.glow!=0 raise "test","fresh run band" end
 ''')
 
     def test_egg_countdown_cracks_hatches_and_roars(self):
