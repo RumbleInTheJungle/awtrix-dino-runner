@@ -78,9 +78,9 @@ python3 tools/render_previews.py
 python3 tools/make_sounds.py   # regenerates sounds/*.mp3; needs the lame encoder
 ```
 
-The tests run the actual Berry game against device-service mocks. The host links the AWTRIX checkout’s Berry VM; it does not copy firmware sources into this repository. Preview PNGs are generated from the game renderer at 52×16, then enlarged without smoothing. See [Verification](docs/developers/verification.md) for measurements and outstanding TC002 checks.
+The tests run the actual Berry game against device-service mocks. The host links the AWTRIX checkout’s Berry VM; it does not copy firmware sources into this repository. Preview PNGs are generated from the game renderer at 52×16, then enlarged without smoothing. See [Verification](docs/developers/verification.md) for measurements and outstanding TC002 checks. The MP3s in `sounds/` are synthesised from scratch by `tools/make_sounds.py`; they use no recordings, samples or speech voices.
 
-The initial Git commit preserves the supplied game. [Provenance](PROVENANCE.md) records the sources and license status. The source repository is [RumbleInTheJungle/awtrix-dino-runner](https://github.com/RumbleInTheJungle/awtrix-dino-runner).
+The initial Git commit preserves the version first published on AWTRIX Hub. The source repository is [RumbleInTheJungle/awtrix-dino-runner](https://github.com/RumbleInTheJungle/awtrix-dino-runner).
 
 ## License
 
