@@ -116,6 +116,6 @@ The original poster is concept art. Actual graphics use small pixel patterns, si
 
 ## Reference and review
 
-The original detailed German prompt is preserved at [CODEX_PROMPT.md](../reference/CODEX_PROMPT.md). The three reference PNGs remain alongside it. The blue dino in the Matrix concept image does not apply to this implementation.
+The original detailed German prompt and the three reference PNGs are kept locally in the ignored `reference/` folder and are not published with this repository. The blue dino in the Matrix concept image does not apply to this implementation.
 
 Review [the rendered contact sheet](../previews/contact-sheet.png) and the individual 52×16 PNGs in `previews/`. These are outputs from the game’s Berry renderer, using native raster mocks in the test host. They are not AI-generated previews.
